@@ -1,0 +1,9 @@
+.env
+.credentials.tmp.json
+node_modules/
+tests/output/
+.playwright-mcp/
+__pycache__/
+*.log
+.DS_Store
+Thumbs.db

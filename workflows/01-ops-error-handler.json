@@ -1,0 +1,76 @@
+{
+  "id": "PfOpsErrorHandlr",
+  "name": "Ops: Error handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "750b925a-4add-4710-aec2-f667c0d79bc7",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH e AS (\n    INSERT INTO ops.workflow_errors (workflow_id, workflow_name, execution_id, execution_url, node_name,\n                                     error_message, error_stack, mode)\n    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n    RETURNING id\n)\nINSERT INTO ops.alerts (severity, source, title, details)\nSELECT 'critical', 'n8n', 'Workflow failed: ' || coalesce($2, 'unknown'),\n       jsonb_build_object('error_id', e.id, 'node', $5, 'message', $6, 'execution_url', $4)\nFROM e\nRETURNING id AS alert_id;",
+        "options": {
+          "queryReplacement": "={{ [ $json.workflow?.id ?? null, $json.workflow?.name ?? null, $json.execution?.id ?? null, $json.execution?.url ?? null, $json.execution?.lastNodeExecuted ?? null, $json.execution?.error?.message ?? null, $json.execution?.error?.stack ?? null, $json.execution?.mode ?? null ] }}"
+        }
+      },
+      "id": "daa62613-03c5-4fb3-ac64-809fd02b00cf",
+      "name": "Log error and raise alert",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        240,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgAppsCred000001",
+          "name": "Apps DB (Postgres)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Central error handler\nEvery workflow in this project points here (Settings > Error workflow).\n\nFailures land in `ops.workflow_errors` and raise a row in `ops.alerts`, so nothing fails silently.\n\nIn production, add a Slack / Teams / email node after the SQL step.",
+        "height": 220,
+        "width": 420,
+        "color": 7
+      },
+      "id": "510501da-6582-4165-a8e2-fe1d73e2b0fa",
+      "name": "Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -260
+      ]
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log error and raise alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "active": false
+}
