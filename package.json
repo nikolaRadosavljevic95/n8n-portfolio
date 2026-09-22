@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "description": "Production-style n8n workflows with tests: RFQ to quote, AI receptionist backend, reliable payment webhooks",
+  "license": "MIT",
   "scripts": {
     "build": "node scripts/build-workflows.mjs",
     "check": "node scripts/check.mjs",

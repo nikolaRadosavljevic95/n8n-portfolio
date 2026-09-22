@@ -209,3 +209,7 @@ tests/         end-to-end tests against the running stack
 ## About
 
 Nikola Radosavljević, software engineer in Belgrade. Six years of .NET, Angular and Azure (Microsoft Certified: Azure Developer Associate), currently working on event-driven microservices with Kafka and Cassandra. I build n8n automations that can be trusted with money, bookings and customer data.
+
+## License
+
+MIT, see [LICENSE](LICENSE). The code is free to reuse; the sample data and screenshots are made up for the demos.
