@@ -1,0 +1,526 @@
+{
+  "id": "PfPayProcess0001",
+  "name": "Payments: Event processor",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "fa8079ee-ffb8-4898-abaa-e6c8fa027eea",
+      "name": "When called for one event",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "722b3606-0bff-42a7-a0f0-85b053d985c4",
+      "name": "Sweep every 10 seconds",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM pay.claim($1, 25);",
+        "options": {
+          "queryReplacement": "={{ [ $json.event_id ?? null ] }}"
+        }
+      },
+      "id": "12f551b2-68ef-4a38-a6ff-c02720446cba",
+      "name": "Claim due events",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        240,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgAppsCred000001",
+          "name": "Apps DB (Postgres)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT pay.apply($1::bigint) AS r;",
+        "options": {
+          "queryReplacement": "={{ [ $json.id ] }}",
+          "queryBatching": "independently"
+        }
+      },
+      "id": "fa79a6a2-478c-4744-aac2-2f8bca22d68d",
+      "name": "Apply state transition",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        460,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgAppsCred000001",
+          "name": "Apps DB (Postgres)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "827558a2-e18b-f9b4-3406-9a3ec99a1954",
+                    "leftValue": "={{ $json.r.action }}",
+                    "rightValue": "fulfill",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "fulfill"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "ceec8c05-8f99-74b8-6ee8-2e89acb25d84",
+                    "leftValue": "={{ $json.r.action }}",
+                    "rightValue": "retry",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "retry"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "33cad0d9-1d0d-eb45-f81c-ffa7c6a9e884",
+                    "leftValue": "={{ $json.r.action }}",
+                    "rightValue": "complete",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "complete"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1d6b29f5-3c1d-46b1-a997-ef793c2f0ba4",
+      "name": "Next step",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        700,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.MOCK_POS_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ $json.r.event_id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ order_id: $json.r.order_id, amount_cents: $json.r.amount_cents, currency: $json.r.currency, customer_email: $json.r.customer_email }) }}",
+        "options": {
+          "timeout": 5000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "4be87865-b27c-49e0-af55-ace5ed4aa810",
+      "name": "POS: create order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        960,
+        -40
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6fac6111-5b5c-1127-f4fa-c35b6eb3c612",
+              "leftValue": "={{ [200, 201].includes($json.statusCode) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "b3d0417a-69ed-4f2a-aa35-227b7d7d4ec0",
+      "name": "POS accepted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1180,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT pay.fulfilled($1::bigint, $2, $3) AS r;",
+        "options": {
+          "queryReplacement": "={{ [ $('Apply state transition').item.json.r.inbox_id, $('Apply state transition').item.json.r.order_id, $json.body.pos_order_id ] }}",
+          "queryBatching": "independently"
+        }
+      },
+      "id": "e81e7a9b-1e20-4fdf-a878-4d7c910c9185",
+      "name": "Mark fulfilled",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1420,
+        -120
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgAppsCred000001",
+          "name": "Apps DB (Postgres)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT pay.fail($1::bigint, $2) AS r;",
+        "options": {
+          "queryReplacement": "={{ [ $('Apply state transition').item.json.r.inbox_id, $json.r?.outcome ? 'Waiting: ' + $json.r.outcome : 'POS error: ' + ($json.statusCode ?? 'no response') + ' ' + JSON.stringify($json.body ?? $json.error ?? '').slice(0, 300) ] }}",
+          "queryBatching": "independently"
+        }
+      },
+      "id": "5fa7d061-b60a-445b-a3dc-52ddc2caef7b",
+      "name": "Schedule retry or dead-letter",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1420,
+        120
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgAppsCred000001",
+          "name": "Apps DB (Postgres)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a0a13a82-149b-c03d-9c0c-bd3cc44210ee",
+              "leftValue": "={{ $json.r.status === 'dead' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "47046c24-bb20-4cb4-a5bf-55f834ff2ba1",
+      "name": "Dead-lettered?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1660,
+        120
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "e52c10b6-1bca-41fc-a0f4-82fadcfb3661",
+      "name": "Page on-call (dead letter)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1900,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT pay.complete($1::bigint, $2) AS r;",
+        "options": {
+          "queryReplacement": "={{ [ $json.r.inbox_id, $json.r.outcome ] }}",
+          "queryBatching": "independently"
+        }
+      },
+      "id": "87362d90-7ac3-4941-ae79-d83e0471840c",
+      "name": "Complete event",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        960,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgAppsCred000001",
+          "name": "Apps DB (Postgres)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Processor: at-least-once, effectively once\n- Events are claimed with `FOR UPDATE SKIP LOCKED` and a 2 minute lease, so several n8n workers never process the same event, and a crashed execution is picked up again after the lease expires.\n- The order state machine lives in `pay.apply()`: duplicates are no-ops, a refund that arrives before the payment is parked and retried (`out_of_order`).\n- The POS call carries `Idempotency-Key = event_id`, so a retry after a timeout cannot create a second POS order.",
+        "height": 240,
+        "width": 600,
+        "color": 7
+      },
+      "id": "8d805f05-e7e9-4f69-a796-287a483e28f4",
+      "name": "Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Retries and dead letters\nFailures back off exponentially with jitter (30s, 60s, 120s... capped at 1h). After `max_attempts` the event is dead-lettered and a critical alert is raised in `ops.alerts`.\n\nReplace the NoOp with Slack / PagerDuty. Fix the cause, then `POST /webhook/payments/admin/replay`.",
+        "height": 200,
+        "width": 520,
+        "color": 3
+      },
+      "id": "42942e18-dc75-4161-ab7b-8e0c7e1a8232",
+      "name": "Note 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1380,
+        340
+      ]
+    }
+  ],
+  "connections": {
+    "When called for one event": {
+      "main": [
+        [
+          {
+            "node": "Claim due events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sweep every 10 seconds": {
+      "main": [
+        [
+          {
+            "node": "Claim due events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim due events": {
+      "main": [
+        [
+          {
+            "node": "Apply state transition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply state transition": {
+      "main": [
+        [
+          {
+            "node": "Next step",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Next step": {
+      "main": [
+        [
+          {
+            "node": "POS: create order",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Schedule retry or dead-letter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Complete event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POS: create order": {
+      "main": [
+        [
+          {
+            "node": "POS accepted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POS accepted?": {
+      "main": [
+        [
+          {
+            "node": "Mark fulfilled",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Schedule retry or dead-letter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule retry or dead-letter": {
+      "main": [
+        [
+          {
+            "node": "Dead-lettered?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dead-lettered?": {
+      "main": [
+        [
+          {
+            "node": "Page on-call (dead letter)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "PfOpsErrorHandlr"
+  },
+  "pinData": {},
+  "active": false
+}

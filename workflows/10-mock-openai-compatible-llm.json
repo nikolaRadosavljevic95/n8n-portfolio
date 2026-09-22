@@ -1,0 +1,102 @@
+{
+  "id": "PfMockLlm0000001",
+  "name": "Mock: OpenAI-compatible LLM",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mock/llm/chat/completions",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "efc00822-0be4-4a78-aba9-9fd5bec941f3",
+      "name": "POST /mock/llm/chat/completions",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "2c252dd4-7bb8-4b99-a835-38c053a788e4"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const body = $input.first().json.body || {};\nconst text = String(body.messages?.find((m) => m.role === 'user')?.content || '');\n\nconst lines = [];\nif (/NYM 3x2\\.5/i.test(text)) {\n  lines.push(\n    { code: null, description: 'NYM 3x2.5 cable', qty: 200, unit: 'm' },\n    { code: null, description: 'B16 single pole breakers', qty: 30, unit: 'pcs' },\n    { code: null, description: '600 by 600 LED panels, 40 watt, neutral white 4000K', qty: 18, unit: 'pcs' },\n    { code: null, description: '4-pole residual current devices, 40 amp, 30mA', qty: 4, unit: 'pcs' },\n    { code: null, description: 'surface IP44 sockets', qty: 6, unit: 'pcs' },\n    { code: null, description: 'Surge arrester type 1 50kA', qty: 2, unit: 'pcs' },\n  );\n}\n\nreturn [{\n  json: {\n    id: `chatcmpl-mock-${Date.now()}`,\n    object: 'chat.completion',\n    created: Math.floor(Date.now() / 1000),\n    model: `${body.model || 'unknown'}-mock`,\n    choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: JSON.stringify({ lines }) } }],\n    usage: { prompt_tokens: Math.ceil(text.length / 4), completion_tokens: 180, total_tokens: Math.ceil(text.length / 4) + 180 },\n  },\n}];"
+      },
+      "id": "4da3182e-fd5e-489c-a965-dc4cc438a2cd",
+      "name": "Canned completion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "4a219116-09fe-4d0d-a58e-a2216a242cd5",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Test double for the LLM step\nSpeaks the OpenAI chat completions format. Returns the lines from the free text sample RFQ plus one invented item, so the tests can prove that the grounding check rejects hallucinated lines.\n\nPoint `LLM_BASE_URL` at `http://localhost:5678/webhook/mock/llm` to use it.",
+        "height": 200,
+        "width": 460,
+        "color": 7
+      },
+      "id": "1e70dbac-9576-4093-abea-7afc430f01e7",
+      "name": "Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -240
+      ]
+    }
+  ],
+  "connections": {
+    "POST /mock/llm/chat/completions": {
+      "main": [
+        [
+          {
+            "node": "Canned completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Canned completion": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "PfOpsErrorHandlr"
+  },
+  "pinData": {},
+  "active": false
+}

@@ -1,0 +1,515 @@
+{
+  "id": "PfPayAdmin000001",
+  "name": "Payments: Admin API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "payments/admin/health",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "12efebc4-437f-40d1-af22-ce258c751500",
+      "name": "GET /payments/admin/health",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "87e2fd9a-c4f7-4b25-af01-c5f82ae1fe5a"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const crypto = require('crypto');\n\nconst item = $input.first();\nconst expected = String($env.ADMIN_API_TOKEN || '');\nconst provided = String(item.json.headers?.['x-admin-token'] || '');\nconst ok = expected.length > 0\n  && provided.length === expected.length\n  && crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));\n\nreturn [{ json: { ...item.json, authorized: ok } }];"
+      },
+      "id": "ab1ff14f-18ba-40ec-ab0d-fa32e1d488fc",
+      "name": "Authorize (health)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "fc515a83-01d5-4583-cf75-d32fb4b38e5b",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "9f22318f-26c0-482d-a951-2704f43fc9e0",
+      "name": "Admin token ok?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        460,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT pay.health() AS h;",
+        "options": {}
+      },
+      "id": "5b201b9c-c525-48e2-a72f-a804fb7b1354",
+      "name": "Health snapshot",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        700,
+        -80
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgAppsCred000001",
+          "name": "Apps DB (Postgres)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.h }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "2e483a8d-c84d-4fe6-a2d2-261fa588deb9",
+      "name": "Respond health",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        940,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'unauthorized' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "65ed0671-4951-4a9d-a5a8-061eb06ad1f6",
+      "name": "Respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        700,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "payments/admin/replay",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "4f4ab2e6-a7b9-4b2f-a047-2bc30a8d8e68",
+      "name": "POST /payments/admin/replay",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        320
+      ],
+      "webhookId": "de705f20-df30-45fd-a5ae-7da3f5521ab6"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const crypto = require('crypto');\n\nconst item = $input.first();\nconst expected = String($env.ADMIN_API_TOKEN || '');\nconst provided = String(item.json.headers?.['x-admin-token'] || '');\nconst ok = expected.length > 0\n  && provided.length === expected.length\n  && crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));\n\nreturn [{ json: { ...item.json, authorized: ok } }];"
+      },
+      "id": "73cac2f7-6819-4cf9-a20e-42667b0b038f",
+      "name": "Authorize (replay)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "fc515a83-01d5-4583-cf75-d32fb4b38e5b",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "7ef7cc34-b032-4d3b-ab52-53e11e3563a5",
+      "name": "Admin token ok? ",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        460,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT pay.replay($1) AS r;",
+        "options": {
+          "queryReplacement": "={{ [ String($json.body?.event_id ?? '') ] }}"
+        }
+      },
+      "id": "c86f700a-6c6a-45fa-a928-b33fff89d205",
+      "name": "Requeue event",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        700,
+        240
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgAppsCred000001",
+          "name": "Apps DB (Postgres)"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "adb128c1-e70e-9071-d57a-ab793f933913",
+              "leftValue": "={{ !!$json.r }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "9be64fec-7013-4491-a3dd-0ea4a6fcde5f",
+      "name": "Requeued?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        940,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { requeued: $json.r.event_id } }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "514dad54-6a4a-47bf-ac4f-7bd037bcdcf7",
+      "name": "Respond 202",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1180,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { event_id: $json.r.event_id } }];"
+      },
+      "id": "5ad21450-1faf-4660-a8fb-9292fa38a370",
+      "name": "Event id for processor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PfPayProcess0001",
+          "mode": "list",
+          "cachedResultName": "Payments: Event processor"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "id": "9f768a0e-218d-4db3-aaa4-d02b5a15210c",
+      "name": "Process now (async)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1660,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'event_not_found_or_not_dead' } }}",
+        "options": {
+          "responseCode": 404
+        }
+      },
+      "id": "d82ba201-d539-44fe-a4d5-0721279e706b",
+      "name": "Respond 404",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1180,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'unauthorized' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "84f1e101-2270-4739-a990-933eea313f02",
+      "name": "Respond 401 ",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        700,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Ops endpoints (header `x-admin-token`)\n`GET /webhook/payments/admin/health`: inbox and order counts by status, oldest waiting event, dead letters, open alerts. Point Uptime Kuma or Grafana at it.\n\n`POST /webhook/payments/admin/replay` `{ event_id }`: puts a dead-lettered event back in the queue and processes it right away.",
+        "height": 240,
+        "width": 540,
+        "color": 7
+      },
+      "id": "2b0f746b-f8c5-4c65-afae-a9e3580f2633",
+      "name": "Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -300
+      ]
+    }
+  ],
+  "connections": {
+    "GET /payments/admin/health": {
+      "main": [
+        [
+          {
+            "node": "Authorize (health)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorize (health)": {
+      "main": [
+        [
+          {
+            "node": "Admin token ok?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Admin token ok?": {
+      "main": [
+        [
+          {
+            "node": "Health snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Health snapshot": {
+      "main": [
+        [
+          {
+            "node": "Respond health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /payments/admin/replay": {
+      "main": [
+        [
+          {
+            "node": "Authorize (replay)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorize (replay)": {
+      "main": [
+        [
+          {
+            "node": "Admin token ok? ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Admin token ok? ": {
+      "main": [
+        [
+          {
+            "node": "Requeue event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401 ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requeue event": {
+      "main": [
+        [
+          {
+            "node": "Requeued?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requeued?": {
+      "main": [
+        [
+          {
+            "node": "Respond 202",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 404",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond 202": {
+      "main": [
+        [
+          {
+            "node": "Event id for processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Event id for processor": {
+      "main": [
+        [
+          {
+            "node": "Process now (async)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "PfOpsErrorHandlr"
+  },
+  "pinData": {},
+  "active": false
+}

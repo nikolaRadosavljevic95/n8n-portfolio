@@ -1,0 +1,111 @@
+{
+  "id": "PfMockPos0000001",
+  "name": "Mock: POS API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mock/pos/orders",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "de2b1f6c-e738-4113-a4e0-2a7a27c195c7",
+      "name": "POST /mock/pos/orders",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "459acc92-36d2-486d-a9ec-17259dbd97f1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT mock.pos_handle($1, $2) AS r;",
+        "options": {
+          "queryReplacement": "={{ [ $json.headers['idempotency-key'] ?? '', $json.body?.order_id ?? '' ] }}"
+        }
+      },
+      "id": "3f36f5ab-4de1-4514-adcb-51d52dae374b",
+      "name": "Simulate POS",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        240,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgAppsCred000001",
+          "name": "Apps DB (Postgres)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.r.body }}",
+        "options": {
+          "responseCode": "={{ $json.r.http_status }}"
+        }
+      },
+      "id": "720cb334-5251-4dea-af22-1d332d79df58",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Stand-in for a real POS / ERP\nHonours `Idempotency-Key` like Stripe or Square do. Failure injection via `mock.pos_config`: fail the first N calls per key, or always fail for given orders. The tests use it to prove retries, backoff and dead letters.",
+        "height": 200,
+        "width": 460,
+        "color": 7
+      },
+      "id": "0381319a-cff9-4466-a5a8-60f73a5d6ef0",
+      "name": "Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -240
+      ]
+    }
+  ],
+  "connections": {
+    "POST /mock/pos/orders": {
+      "main": [
+        [
+          {
+            "node": "Simulate POS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simulate POS": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "PfOpsErrorHandlr"
+  },
+  "pinData": {},
+  "active": false
+}
