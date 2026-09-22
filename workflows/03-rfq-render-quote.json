@@ -1,0 +1,136 @@
+{
+  "id": "PfRfqRender00001",
+  "name": "RFQ: Render quote (sub-workflow)",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "79c07dc0-7a1b-4765-a910-244fe3e4e848",
+      "name": "When called by another workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const q = $input.first().json.quote ?? $input.first().json;\nconst cur = q.currency || 'EUR';\nconst num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));\nconst fmtDate = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Europe/Belgrade' });\n\nconst REASONS = {\n  CODE_DESCRIPTION_CONFLICT: (l) => `Code ${l.customer_code} points to ${l.sku} (${l.product_name}), but the description asks for something else.`,\n  NO_MATCH: () => 'No product in the catalogue matches this description.',\n  LOW_CONFIDENCE: () => 'The closest product is only a weak match.',\n  AMBIGUOUS: () => 'Several products fit almost equally well.',\n  UNIT_MISMATCH: (l) => `Unit \"${l.unit_requested}\" cannot be converted to the unit the product is sold in.`,\n  NO_PRICE: () => 'The product has no valid price for this customer.',\n  INVALID_QTY: () => 'Quantity is missing or not a positive number.',\n};\nconst ACTIONS = {\n  CODE_DESCRIPTION_CONFLICT: 'Ask the customer which rating they need',\n  NO_MATCH: 'Source it elsewhere or decline the line',\n  LOW_CONFIDENCE: 'Pick the right product or decline',\n  AMBIGUOUS: 'Pick the right candidate',\n  UNIT_MISMATCH: 'Confirm the quantity in the sales unit',\n  NO_PRICE: 'Add a price or ask purchasing',\n  INVALID_QTY: 'Confirm the quantity with the customer',\n};\n\nconst ok = q.lines.filter((l) => l.status === 'OK');\nconst review = q.lines.filter((l) => l.status === 'REVIEW');\nconst statusText = q.status === 'READY'\n  ? 'Ready to send'\n  : q.status === 'NEEDS_MANUAL_ENTRY'\n    ? 'No line items could be read automatically, enter them manually'\n    : `Draft, ${review.length} line${review.length === 1 ? '' : 's'} need a decision (see Review sheet)`;\n\nconst quoteRows = [\n  [{ v: `Quotation ${q.quote_no}`, s: 'title' }],\n  ['Customer', { v: q.customer.name, s: 'bold' }],\n  ['Date', fmtDate(q.created_at)],\n  ['Status', { v: statusText, s: 'bold' }],\n  ['Source', `${q.source_name} (parser: ${q.parser})`],\n  [],\n  ['Line', 'Customer code', 'SKU', 'Product', 'Qty', 'Unit', `Unit price (${cur})`, `Line total (${cur})`, 'Notes']\n    .map((v) => ({ v, s: 'header' })),\n];\nconst headerRow = quoteRows.length;\nfor (const l of ok) {\n  quoteRows.push([\n    { v: l.line_no, s: 'cell' },\n    { v: l.customer_code || '', s: 'cell' },\n    { v: l.sku, s: 'cell' },\n    { v: l.product_name, s: 'wrap' },\n    { v: num(l.qty_quoted), s: 'cell' },\n    { v: l.sales_unit, s: 'cell' },\n    { v: num(l.unit_price), s: 'money' },\n    { v: num(l.line_total), s: 'money' },\n    { v: (l.notes || []).join('; '), s: 'wrap' },\n  ]);\n}\nconst lastDataRow = quoteRows.length;\nquoteRows.push([]);\nquoteRows.push([null, null, null, null, null, null, { v: 'Net total', s: 'bold' }, { v: num(q.net_total), s: 'moneyBold' }]);\nquoteRows.push([null, null, null, null, null, null, { v: 'VAT', s: 'bold' }, { v: num(q.vat_total), s: 'moneyBold' }]);\nquoteRows.push([null, null, null, null, null, null, { v: 'Total incl. VAT', s: 'bold' }, { v: num(q.gross_total), s: 'moneyBold' }]);\nquoteRows.push([]);\nquoteRows.push([{ v: 'Prices come only from the approved price list. Lines on the Review sheet are not priced and not included in the totals.', s: 'muted' }]);\n\nconst reviewRows = [\n  [{ v: `Lines that need a decision (${review.length})`, s: 'title' }],\n  [{ v: 'Nothing on this sheet is priced. Resolve a line with POST /webhook/rfq/review/resolve { quote_no, line_no, sku, remember }.', s: 'muted' }],\n  [],\n  ['Line', 'Customer code', 'Requested', 'Qty', 'Unit', 'Why', 'Best candidates', 'Suggested action']\n    .map((v) => ({ v, s: 'header' })),\n];\nfor (const l of review) {\n  const reasons = l.reasons || [];\n  reviewRows.push([\n    { v: l.line_no, s: 'review' },\n    { v: l.customer_code || '', s: 'review' },\n    { v: l.description, s: 'reviewWrap' },\n    { v: num(l.qty_requested), s: 'review' },\n    { v: l.unit_requested || '', s: 'review' },\n    { v: reasons.map((r) => (REASONS[r] ? REASONS[r](l) : r)).join('\\n'), s: 'reviewWrap' },\n    { v: (l.candidates || []).map((c) => `${c.sku}  ${c.name}  (${Number(c.score).toFixed(2)})`).join('\\n') || 'none', s: 'reviewWrap' },\n    { v: [...new Set(reasons.map((r) => ACTIONS[r]).filter(Boolean))].join('; '), s: 'reviewWrap' },\n  ]);\n}\nif (review.length === 0) reviewRows.push([{ v: 'No lines need review.', s: 'muted' }]);\n\nreturn [{\n  json: {\n    quote: q,\n    fileName: `${q.quote_no}.xlsx`,\n    sheets: [\n      {\n        name: 'Quote',\n        colWidths: [10, 20, 22, 48, 8, 8, 16, 18, 42],\n        freezeRows: headerRow,\n        autoFilter: { fromRow: headerRow, toRow: lastDataRow, cols: 9 },\n        rows: quoteRows,\n      },\n      {\n        name: 'Review',\n        colWidths: [8, 16, 36, 8, 8, 46, 62, 34],\n        freezeRows: 4,\n        autoFilter: { fromRow: 4, toRow: 4 + review.length, cols: 8 },\n        rows: reviewRows,\n      },\n    ],\n  },\n}];"
+      },
+      "id": "df56bbff-4533-4425-af39-8db579dd21be",
+      "name": "Build sheets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PfUtilBuildXlsx0",
+          "mode": "list",
+          "cachedResultName": "Util: Build XLSX"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "a0a6e9d3-b776-4267-a3ee-ad45b5e6d37f",
+      "name": "Build XLSX",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const quote = $('Build sheets').first().json.quote;\nreturn [{ json: quote, binary: $input.first().binary }];"
+      },
+      "id": "5aed0e8a-3125-4e0f-a581-c5f6c365bfa4",
+      "name": "Attach quote data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Quote to Excel\nTurns a stored quote into a two sheet workbook:\n- **Quote**: priced lines, totals, VAT\n- **Review**: lines that need a human decision, with the reason, top candidates and a suggested action\n\nUsed right after a quote is created and again when someone downloads it later.",
+        "height": 240,
+        "width": 460,
+        "color": 7
+      },
+      "id": "a7e28a28-c59d-4f29-ab71-51eeacebea6c",
+      "name": "Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -280
+      ]
+    }
+  ],
+  "connections": {
+    "When called by another workflow": {
+      "main": [
+        [
+          {
+            "node": "Build sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build sheets": {
+      "main": [
+        [
+          {
+            "node": "Build XLSX",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build XLSX": {
+      "main": [
+        [
+          {
+            "node": "Attach quote data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "PfOpsErrorHandlr"
+  },
+  "pinData": {},
+  "active": false
+}

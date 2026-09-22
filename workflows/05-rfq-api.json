@@ -1,0 +1,734 @@
+{
+  "id": "PfRfqApi00000001",
+  "name": "RFQ: API (webhooks)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rfq/quote",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "7d6aded4-112c-4148-abfc-ed90f9af119e",
+      "name": "POST /rfq/quote",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "c2e9ddba-1c45-462a-a638-cbb285208010"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first();\nconst body = item.json.body || {};\nconst query = item.json.query || {};\nconst binaryKey = Object.keys(item.binary || {})[0];\nconst file = binaryKey ? item.binary[binaryKey] : null;\nconst lines = Array.isArray(body.lines) ? body.lines : null;\nconst customerId = Number(body.customer_id ?? query.customer_id);\n\nconst errors = [];\nif (!Number.isInteger(customerId) || customerId <= 0) errors.push('customer_id (positive integer) is required');\nif (!file && !lines) errors.push('send a PDF as multipart field \"file\", or JSON with a \"lines\" array');\nif (file && !/pdf/i.test(file.mimeType || '') && !/\\.pdf$/i.test(file.fileName || '')) errors.push('only PDF files are supported');\nif (lines && lines.length > 500) errors.push('at most 500 lines per request');\n\nif (errors.length) {\n  return [{ json: { valid: false, errors } }];\n}\n\nconst out = {\n  json: {\n    valid: true,\n    customer_id: customerId,\n    source_name: file ? file.fileName : body.source_name || 'api-lines',\n    format: String(query.format || 'json').toLowerCase(),\n  },\n};\nif (lines) out.json.lines = lines;\nif (file) out.binary = { data: file };\nreturn [out];"
+      },
+      "id": "b0c20ff4-626b-48f6-a31e-4eba4d3bef1e",
+      "name": "Normalize request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ee3f1617-7807-7d2b-0250-c15f5dac53e4",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "ecb40a3b-b643-4b43-ae59-fc77c427ca52",
+      "name": "Valid request?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PfRfqEngine00001",
+          "mode": "list",
+          "cachedResultName": "RFQ: Engine (sub-workflow)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "f706c2e7-bf9f-43d3-af05-c8314e21f04c",
+      "name": "Run RFQ engine",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        660,
+        -100
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "8f433d88-b19b-cb4b-31f1-796cb6b2112f",
+              "leftValue": "={{ !$json.rejected }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "c0db073a-dd0e-4d00-a7b0-a5f96ddcda07",
+      "name": "Engine accepted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        900,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: $json.error_code, message: $json.message } }}",
+        "options": {
+          "responseCode": 422
+        }
+      },
+      "id": "c2e46eaa-c93d-409e-a27a-6c30d829b1cf",
+      "name": "Respond 422",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1140,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cbaaa804-393a-e5cc-9d9c-24cf98a8fd00",
+              "leftValue": "={{ $('Normalize request').first().json.format === 'xlsx' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "310e7115-cbf3-49b3-a0aa-3dfa7f352220",
+      "name": "Wants XLSX?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1140,
+        -220
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "binary",
+        "responseDataSource": "set",
+        "inputDataFieldName": "data",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Disposition",
+                "value": "=attachment; filename=\"{{ $json.quote_no }}.xlsx\""
+              }
+            ]
+          }
+        }
+      },
+      "id": "f697d151-28af-41ea-abe0-fed7ca76309f",
+      "name": "Respond with XLSX",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1380,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ...$json, xlsx_url: $env.WEBHOOK_URL + 'webhook/rfq/quote/xlsx?quote_no=' + $json.quote_no } }}",
+        "options": {
+          "responseCode": "={{ $json.duplicate ? 200 : 201 }}"
+        }
+      },
+      "id": "711b96ac-70b2-47f9-a704-1a472425ca61",
+      "name": "Respond with quote JSON",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1380,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'processing_failed', message: String($json.error?.message ?? $json.error ?? 'unknown error') } }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "8ec460b9-5fd0-4d85-a876-dee55064bec4",
+      "name": "Respond 500",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        900,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'invalid_request', details: $json.errors } }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "c0eefec3-ede1-4519-aafc-ef069fdc2a6b",
+      "name": "Respond 400",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        660,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "rfq/quote/xlsx",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "c12ac773-bc6d-4a75-a8ff-4c9c29e33c00",
+      "name": "GET /rfq/quote/xlsx",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        440
+      ],
+      "webhookId": "9c8e50a8-1eef-4253-a400-9890e92759c6"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT rfq.quote_json(id) AS quote FROM rfq.quotes WHERE quote_no = $1;",
+        "options": {
+          "queryReplacement": "={{ [ $json.query.quote_no ?? '' ] }}"
+        }
+      },
+      "id": "00db7f57-6bad-473d-a992-7d27fd683419",
+      "name": "Load quote",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        220,
+        440
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgAppsCred000001",
+          "name": "Apps DB (Postgres)"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "463235d1-95da-4546-7df7-a71b77402273",
+              "leftValue": "={{ !!$json.quote }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "25a3b27b-50ae-43bc-ae4e-c91861fbde6b",
+      "name": "Quote found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        440,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PfRfqRender00001",
+          "mode": "list",
+          "cachedResultName": "RFQ: Render quote (sub-workflow)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "cdb721f4-094c-46ec-a8ae-a41a16a484d1",
+      "name": "Render quote",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        660,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "binary",
+        "responseDataSource": "set",
+        "inputDataFieldName": "data",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Disposition",
+                "value": "=attachment; filename=\"{{ $json.quote_no }}.xlsx\""
+              }
+            ]
+          }
+        }
+      },
+      "id": "0e464b85-cb5a-4596-af56-3de7e43483f1",
+      "name": "Respond with XLSX file",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        900,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'quote_not_found' } }}",
+        "options": {
+          "responseCode": 404
+        }
+      },
+      "id": "8bed2564-e3cc-4e14-ad0c-0766b31fa892",
+      "name": "Respond 404",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        660,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rfq/review/resolve",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "1639b34a-ff23-481c-a4d2-5e636fe13ba8",
+      "name": "POST /rfq/review/resolve",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        800
+      ],
+      "webhookId": "ef031470-a146-403a-ad34-03c32e83d5b7"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT rfq.try_resolve_line($1, $2::int, $3, $4::boolean, $5) AS result;",
+        "options": {
+          "queryReplacement": "={{ [ String($json.body.quote_no ?? ''), Number.isInteger(Number($json.body.line_no)) ? Number($json.body.line_no) : 0, String($json.body.sku ?? ''), $json.body.remember === true, String($json.body.resolved_by || 'api') ] }}"
+        }
+      },
+      "id": "cf21efd0-f0bf-4c29-afd8-31904ce0b759",
+      "name": "Resolve line",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        220,
+        800
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgAppsCred000001",
+          "name": "Apps DB (Postgres)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7e87c73a-8e50-523b-e9d8-f236a644ccbb",
+              "leftValue": "={{ $json.result.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "20f45a2b-330c-4d33-a804-4ad131055faa",
+      "name": "Resolved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        440,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.result.quote }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "427877e8-2a0a-4963-a6de-81094a5f6bff",
+      "name": "Respond resolved",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        680,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'cannot_resolve', message: $json.result.error } }}",
+        "options": {
+          "responseCode": 422
+        }
+      },
+      "id": "fe2a37f9-c33d-44c2-afb0-4e48fe217e99",
+      "name": "Respond 422 (resolve)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        680,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## RFQ API\n`POST /webhook/rfq/quote` multipart `file` + `customer_id`, or JSON `{ customer_id, lines }`. Add `?format=xlsx` to get the Excel back directly.\n\n`GET /webhook/rfq/quote/xlsx?quote_no=Q-2026-01001` downloads the current version.\n\n`POST /webhook/rfq/review/resolve` `{ quote_no, line_no, sku, remember }` fixes a review line. With `remember: true` the customer part number is learned, so the next RFQ with that code is matched automatically.",
+        "height": 300,
+        "width": 620,
+        "color": 7
+      },
+      "id": "a0c13e51-2a5a-4ebf-a0dc-2098684c078a",
+      "name": "Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -420
+      ]
+    }
+  ],
+  "connections": {
+    "POST /rfq/quote": {
+      "main": [
+        [
+          {
+            "node": "Normalize request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize request": {
+      "main": [
+        [
+          {
+            "node": "Valid request?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid request?": {
+      "main": [
+        [
+          {
+            "node": "Run RFQ engine",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 400",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run RFQ engine": {
+      "main": [
+        [
+          {
+            "node": "Engine accepted?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 500",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Engine accepted?": {
+      "main": [
+        [
+          {
+            "node": "Wants XLSX?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 422",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wants XLSX?": {
+      "main": [
+        [
+          {
+            "node": "Respond with XLSX",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond with quote JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET /rfq/quote/xlsx": {
+      "main": [
+        [
+          {
+            "node": "Load quote",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load quote": {
+      "main": [
+        [
+          {
+            "node": "Quote found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quote found?": {
+      "main": [
+        [
+          {
+            "node": "Render quote",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 404",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render quote": {
+      "main": [
+        [
+          {
+            "node": "Respond with XLSX file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /rfq/review/resolve": {
+      "main": [
+        [
+          {
+            "node": "Resolve line",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve line": {
+      "main": [
+        [
+          {
+            "node": "Resolved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolved?": {
+      "main": [
+        [
+          {
+            "node": "Respond resolved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 422 (resolve)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "PfOpsErrorHandlr"
+  },
+  "pinData": {},
+  "active": false
+}

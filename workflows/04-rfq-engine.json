@@ -1,0 +1,671 @@
+{
+  "id": "PfRfqEngine00001",
+  "name": "RFQ: Engine (sub-workflow)",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "078438f5-480f-48a1-a05e-4866cc41a5e7",
+      "name": "When called by another workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const crypto = require('crypto');\n\nconst item = $input.first();\nconst reject = (message) => [{ json: { rejected: true, error_code: 'invalid_input', message } }];\n\nconst customerId = Number(item.json.customer_id);\nif (!Number.isInteger(customerId) || customerId <= 0) {\n  return reject('customer_id must be a positive integer');\n}\n\nconst hasPdf = Boolean(item.binary && item.binary.data);\nconst hasLines = Array.isArray(item.json.lines) && item.json.lines.length > 0;\nif (!hasPdf && !hasLines) {\n  return reject('Provide either a PDF in binary field \"data\" or a non-empty \"lines\" array');\n}\n\nif (hasPdf) {\n  const buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\n  if (buffer.subarray(0, 5).toString('latin1') !== '%PDF-') {\n    return reject('The uploaded file is not a PDF');\n  }\n  return [{\n    json: {\n      customer_id: customerId,\n      source_name: item.json.source_name || item.binary.data.fileName || 'rfq.pdf',\n      source_sha256: crypto.createHash('sha256').update(buffer).digest('hex'),\n      mode: 'pdf',\n    },\n    binary: { data: item.binary.data },\n  }];\n}\n\nconst lines = item.json.lines.map((l, i) => ({\n  line_no: Number.isInteger(Number(l.line_no)) ? Number(l.line_no) : i + 1,\n  code: l.code ? String(l.code).trim() : null,\n  description: String(l.description ?? '').trim(),\n  qty: l.qty === undefined || l.qty === null || l.qty === '' ? null : Number(String(l.qty).replace(',', '.')),\n  unit: l.unit ? String(l.unit).trim() : null,\n}));\n\nreturn [{\n  json: {\n    customer_id: customerId,\n    source_name: item.json.source_name || 'api-lines',\n    source_sha256: crypto.createHash('sha256').update(JSON.stringify(lines)).digest('hex'),\n    mode: 'lines',\n    parser: 'api',\n    lines,\n  },\n}];"
+      },
+      "id": "782edb16-f08a-463c-a047-451567225bf8",
+      "name": "Prepare input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "8f433d88-b19b-cb4b-31f1-796cb6b2112f",
+              "leftValue": "={{ !$json.rejected }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "52006944-ae78-47e9-af9f-e167aeeb3d27",
+      "name": "Input valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { rejected: true, error_code: $json.error_code, message: $json.message } }];"
+      },
+      "id": "ce6902e2-377e-4e3e-a18e-802da0ecc63f",
+      "name": "Reject input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "31037796-e7f9-2c23-8134-6d1629e24589",
+              "leftValue": "={{ $json.mode === 'pdf' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "fb8eb673-d1e3-4577-a799-cea51be68d2b",
+      "name": "PDF or lines?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "data",
+        "options": {
+          "joinPages": true
+        }
+      },
+      "id": "99cb15b2-e2ce-41da-a402-b4f276961faf",
+      "name": "Extract PDF text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const prep = $('Prepare input').first().json;\nconst text = String($input.first().json.text || '');\nconst rows = text.split(/\\r?\\n/).map((l) => l.replace(/\\s+/g, ' ').trim()).filter(Boolean);\n\nconst UNIT = '(?:pcs|pc|kom|ea|each|x|m|mtr|mtrs|meters?|metres?|lm|rolls?|rings?|coils?|reels?|packs?|pk|pkg|box(?:es)?|sets?|nos)';\nconst TABLE_ROW = new RegExp(`^(\\\\d{1,3})\\\\s+(.+?)\\\\s+(\\\\d+(?:[.,]\\\\d+)?)\\\\s+(${UNIT})\\\\.?$`, 'i');\nconst BULLET_ROW = new RegExp(`^(?:[-\\\\u2022*\\\\u2013]|\\\\d{1,3}[.)])\\\\s*(\\\\d+(?:[.,]\\\\d+)?)\\\\s*(${UNIT})?\\\\b\\\\.?\\\\s*(.+)$`, 'i');\nconst HEADER_WORDS = ['pos', 'item', 'code', 'description', 'qty', 'quantity', 'unit', 'uom', 'article'];\n\nconst toNumber = (s) => Number(String(s).replace(',', '.'));\nconst looksLikeCode = (token) => (token.match(/\\d/g) || []).length >= 3\n  && token.length >= 5\n  && /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(token);\n\nfunction parseTable() {\n  const headerAt = rows.findIndex((l) => {\n    const words = l.toLowerCase().split(/[^a-z]+/);\n    return HEADER_WORDS.filter((w) => words.includes(w)).length >= 3;\n  });\n  if (headerAt < 0) return null;\n\n  const lines = [];\n  const unparsed = [];\n  for (const row of rows.slice(headerAt + 1)) {\n    const m = row.match(TABLE_ROW);\n    if (m) {\n      const [, pos, middle, qty, unit] = m;\n      const first = middle.split(' ')[0];\n      const code = looksLikeCode(first) ? first : null;\n      lines.push({\n        line_no: Number(pos),\n        code,\n        description: code ? middle.slice(first.length).trim() : middle,\n        qty: toNumber(qty),\n        unit,\n      });\n    } else if (/^\\d{1,3}\\s+\\S/.test(row)) {\n      unparsed.push(row);\n    }\n  }\n  return lines.length ? { parser: 'table', lines, unparsed } : null;\n}\n\nfunction parseList() {\n  const lines = [];\n  for (const row of rows) {\n    const m = row.match(BULLET_ROW);\n    if (m) {\n      lines.push({ line_no: lines.length + 1, code: null, description: m[3].trim(), qty: toNumber(m[1]), unit: m[2] || null });\n    }\n  }\n  return lines.length ? { parser: 'list', lines, unparsed: [] } : null;\n}\n\nconst result = parseTable() || parseList() || { parser: 'none', lines: [], unparsed: [] };\n\nlet next = result.lines.reduce((max, l) => Math.max(max, l.line_no), 0) + 1;\nfor (const row of result.unparsed) {\n  result.lines.push({ line_no: next++, code: null, description: row, qty: null, unit: null });\n}\n\nreturn [{\n  json: {\n    ...prep,\n    parser: result.parser,\n    lines: result.lines,\n    unparsed_count: result.unparsed.length,\n    source_text: text.slice(0, 20000),\n  },\n}];"
+      },
+      "id": "edb37c66-7e56-4c38-a144-1919844fc838",
+      "name": "Template parsers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "5cb28781-e16b-b3c1-bcce-b3ff068488c5",
+              "leftValue": "={{ $json.lines.length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "152a2de2-9b80-452b-acb0-701b17606136",
+      "name": "Parsed by a template?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1320,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "e62194fb-09b2-6972-bb9e-0990ba91990c",
+              "leftValue": "={{ $env.LLM_ENABLED === 'true' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "429d481b-bbeb-4c86-a5ce-0f94983ece09",
+      "name": "LLM enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1540,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const prep = $input.first().json;\n\nconst schema = {\n  type: 'object',\n  additionalProperties: false,\n  required: ['lines'],\n  properties: {\n    lines: {\n      type: 'array',\n      items: {\n        type: 'object',\n        additionalProperties: false,\n        required: ['code', 'description', 'qty', 'unit'],\n        properties: {\n          code: { type: ['string', 'null'], description: 'Item or part code exactly as written, or null' },\n          description: { type: 'string', description: 'Product description copied from the text, not rewritten' },\n          qty: { type: ['number', 'null'], description: 'Requested quantity as a number, words converted to digits' },\n          unit: { type: ['string', 'null'], description: 'Unit as written (m, pcs, roll...), or null' },\n        },\n      },\n    },\n  },\n};\n\nconst system = [\n  'You extract requested line items from a customer request for quotation.',\n  'Only extract products the customer asks to be quoted. Ignore greetings, delivery notes and questions.',\n  'Copy product descriptions as written. Do not correct, complete or translate them.',\n  'Convert quantities written as words to digits. Use null when a code, quantity or unit is not stated.',\n  'Never invent items that are not in the text.',\n].join(' ');\n\nreturn [{\n  json: {\n    ...prep,\n    llm_request: {\n      model: $env.LLM_MODEL || 'gpt-4.1-mini',\n      temperature: 0,\n      response_format: { type: 'json_schema', json_schema: { name: 'rfq_lines', strict: true, schema } },\n      messages: [\n        { role: 'system', content: system },\n        { role: 'user', content: prep.source_text },\n      ],\n    },\n  },\n}];"
+      },
+      "id": "845e502e-15d7-4d46-ae04-019c9a67be7b",
+      "name": "Build LLM request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.LLM_BASE_URL || 'https://api.openai.com/v1') + '/chat/completions' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.llm_request) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "b36eca98-0cbd-4238-a0b6-b00ed937f7df",
+      "name": "LLM: extract line items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1980,
+        -120
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "openAiApi": {
+          "id": "openAiCred000001",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const prep = $('Build LLM request').first().json;\nconst response = $input.first().json;\n\nlet parsed;\ntry {\n  parsed = JSON.parse(response.choices?.[0]?.message?.content ?? '');\n} catch (e) {\n  throw new Error('The LLM did not return valid JSON for the RFQ lines');\n}\n\nconst source = prep.source_text.toLowerCase().replace(/(\\d),(\\d)/g, '$1.$2');\nconst tokens = (s) => String(s).toLowerCase().replace(/(\\d),(\\d)/g, '$1.$2').split(/[^a-z0-9.]+/).filter((t) => t.length >= 2);\n\nconst lines = [];\nconst rejected = [];\nfor (const l of parsed.lines || []) {\n  const description = String(l.description || '').trim();\n  const words = tokens(description);\n  const grounded = words.length > 0 && words.filter((w) => source.includes(w)).length / words.length >= 0.6;\n  if (!description || !grounded) {\n    rejected.push({ description, reason: description ? 'NOT_FOUND_IN_SOURCE' : 'EMPTY_DESCRIPTION' });\n    continue;\n  }\n  const qty = Number(l.qty);\n  lines.push({\n    line_no: lines.length + 1,\n    code: l.code ? String(l.code).trim() : null,\n    description,\n    qty: Number.isFinite(qty) && qty > 0 ? qty : null,\n    unit: l.unit ? String(l.unit).trim() : null,\n  });\n}\n\nfor (const r of rejected) {\n  lines.push({ line_no: lines.length + 1, code: null, description: `[unverified LLM output] ${r.description}`.trim(), qty: null, unit: null });\n}\n\nreturn [{\n  json: {\n    customer_id: prep.customer_id,\n    source_name: prep.source_name,\n    source_sha256: prep.source_sha256,\n    mode: prep.mode,\n    parser: 'llm',\n    lines,\n    llm_model: response.model || null,\n    llm_rejected: rejected.length,\n  },\n}];"
+      },
+      "id": "acde2017-9772-48ac-a667-e9cc923a908e",
+      "name": "Validate LLM output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        -120
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "733a2acd-de35-4eb9-a1c1-85bcf6de50ca",
+      "name": "Parsed lines",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT CASE WHEN c.id IS NULL THEN NULL ELSE rfq.match_lines(x.cid, $2::jsonb) END AS lines,\n       c.id IS NOT NULL AS customer_exists\nFROM (SELECT $1::int AS cid) x\nLEFT JOIN rfq.customers c ON c.id = x.cid;",
+        "options": {
+          "queryReplacement": "={{ [ $json.customer_id, JSON.stringify($json.lines) ] }}"
+        }
+      },
+      "id": "5fa6f36a-98f0-497e-aff2-ccc2d6f89cc4",
+      "name": "Match & price",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        2640,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgAppsCred000001",
+          "name": "Apps DB (Postgres)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "e9d39a63-1ed7-9fad-3293-6e0c4578d848",
+              "leftValue": "={{ $json.customer_exists }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "e8ddb317-a210-491c-a74e-aa3b24448659",
+      "name": "Known customer?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2860,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { rejected: true, error_code: 'unknown_customer', message: 'Unknown customer_id ' + $('Parsed lines').first().json.customer_id } }];"
+      },
+      "id": "c9947236-b7d5-49fb-ac11-e0b3d2f63d78",
+      "name": "Reject unknown customer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT rfq.save_quote($1::int, $2, $3, $4, $5::jsonb) AS quote;",
+        "options": {
+          "queryReplacement": "={{ [ $('Parsed lines').first().json.customer_id, $('Parsed lines').first().json.source_sha256, $('Parsed lines').first().json.source_name, $('Parsed lines').first().json.parser, JSON.stringify($json.lines) ] }}"
+        }
+      },
+      "id": "47e462ec-7649-4ef3-a5a3-e476f2b5e19d",
+      "name": "Save quote",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        3080,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgAppsCred000001",
+          "name": "Apps DB (Postgres)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PfRfqRender00001",
+          "mode": "list",
+          "cachedResultName": "RFQ: Render quote (sub-workflow)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "6a8ec731-fe39-455e-a39f-ddfeaf106d96",
+      "name": "Render quote",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        3300,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## RFQ engine\nPDF (or structured lines) in, priced quote + Excel out. Bad input comes back as `{ rejected, error_code, message }` instead of failing the run, so client mistakes never page on-call.\n\n**Design rules**\n1. The LLM only reads text. It never picks products or prices.\n2. Prices come only from the approved price list (SQL lookup).\n3. Nothing is guessed silently. Every uncertain line goes to review with a reason.\n4. Same PDF twice for the same customer returns the same quote (SHA-256 idempotency).",
+        "height": 290,
+        "width": 480,
+        "color": 5
+      },
+      "id": "e010e397-1f0f-4c64-a7a2-ebeb97dc445a",
+      "name": "Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Parsing: cheap and exact first\nTemplate parsers handle known layouts (ERP table exports, bullet lists in emails) for free and without mistakes. Lines that look like data but do not parse are kept and sent to review.\n\nOnly unknown layouts go to the LLM (JSON schema output). Its lines are checked against the source text, so invented items are rejected.",
+        "height": 220,
+        "width": 560,
+        "color": 6
+      },
+      "id": "79c6502b-e709-4908-a2d8-7059cecd31a0",
+      "name": "Note 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        860,
+        -380
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Matching lives in Postgres\n`rfq.match_lines()` does hybrid retrieval: customer part numbers, SKUs, manufacturer and EAN aliases, then trigram text search plus technical attributes (16A, 3x1.5 mm², 30mA, IP65...).\n\nA candidate whose attributes contradict the request (B16 vs B10) is never auto-picked. Units are converted to how the product is sold (250 m of cable = 3 rings of 100 m).",
+        "height": 220,
+        "width": 560,
+        "color": 4
+      },
+      "id": "03b68a81-4fe4-435d-a962-74c4a7f4ec0e",
+      "name": "Note 3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        480
+      ]
+    }
+  ],
+  "connections": {
+    "When called by another workflow": {
+      "main": [
+        [
+          {
+            "node": "Prepare input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare input": {
+      "main": [
+        [
+          {
+            "node": "Input valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input valid?": {
+      "main": [
+        [
+          {
+            "node": "PDF or lines?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF or lines?": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parsed lines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF text": {
+      "main": [
+        [
+          {
+            "node": "Template parsers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Template parsers": {
+      "main": [
+        [
+          {
+            "node": "Parsed by a template?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsed by a template?": {
+      "main": [
+        [
+          {
+            "node": "Parsed lines",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "LLM enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM enabled?": {
+      "main": [
+        [
+          {
+            "node": "Build LLM request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parsed lines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build LLM request": {
+      "main": [
+        [
+          {
+            "node": "LLM: extract line items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM: extract line items": {
+      "main": [
+        [
+          {
+            "node": "Validate LLM output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate LLM output": {
+      "main": [
+        [
+          {
+            "node": "Parsed lines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsed lines": {
+      "main": [
+        [
+          {
+            "node": "Match & price",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match & price": {
+      "main": [
+        [
+          {
+            "node": "Known customer?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Known customer?": {
+      "main": [
+        [
+          {
+            "node": "Save quote",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject unknown customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save quote": {
+      "main": [
+        [
+          {
+            "node": "Render quote",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "PfOpsErrorHandlr"
+  },
+  "pinData": {},
+  "active": false
+}
