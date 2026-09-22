@@ -2,10 +2,41 @@ name: ci
 
 on:
   push:
+    branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+# A pull request that gets a second push should not keep a 20 minute Docker job
+# running for the code it just replaced.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  check:
+    name: Static checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax of Code node files, workflows and tests
+        run: npm run check
+      - name: Generated workflow JSON matches src/
+        run: |
+          npm run build
+          if ! git diff --exit-code -- workflows; then
+            echo "::error::workflows/ is out of date. Run 'npm run build' and commit the result."
+            exit 1
+          fi
+
   e2e:
+    name: End-to-end
+    needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -14,17 +45,18 @@ jobs:
         with:
           node-version: 22
       - name: Start stack, import and publish workflows
-        run: bash scripts/setup.sh
+        run: npm run setup
       - name: End-to-end tests
-        run: node tests/run-all.mjs
+        run: npm test
       - name: LLM path against the mock
-        run: bash scripts/test-llm-mock.sh
+        run: npm run test:llm
       - name: Keep the test report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-report
           path: tests/output/
+          if-no-files-found: ignore
       - name: n8n logs on failure
         if: failure()
         run: docker logs n8n-portfolio-n8n-1 --tail 300
