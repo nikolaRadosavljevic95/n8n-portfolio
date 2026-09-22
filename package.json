@@ -5,6 +5,7 @@
   "description": "Production-style n8n workflows with tests: RFQ to quote, AI receptionist backend, reliable payment webhooks",
   "scripts": {
     "build": "node scripts/build-workflows.mjs",
+    "check": "node scripts/check.mjs",
     "setup": "bash scripts/setup.sh",
     "test": "node tests/run-all.mjs",
     "test:llm": "bash scripts/test-llm-mock.sh"

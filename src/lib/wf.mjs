@@ -11,10 +11,6 @@ export function code(relPath) {
   return fs.readFileSync(path.join(ROOT, 'src', 'code', relPath), 'utf8').trimEnd();
 }
 
-export function sql(relPath) {
-  return fs.readFileSync(path.join(ROOT, 'src', 'sql', relPath), 'utf8').trimEnd();
-}
-
 function uuidFrom(seed) {
   const h = crypto.createHash('sha1').update(seed).digest('hex');
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;

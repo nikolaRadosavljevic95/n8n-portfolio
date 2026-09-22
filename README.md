@@ -1,5 +1,7 @@
 # n8n automation portfolio
 
+[![ci](https://github.com/nikolaRadosavljevic95/n8n-portfolio/actions/workflows/ci.yml/badge.svg)](https://github.com/nikolaRadosavljevic95/n8n-portfolio/actions/workflows/ci.yml)
+
 Three working n8n systems, built the way I would build them for a client: business rules in Postgres, idempotent webhooks, retries with dead letters, and end-to-end tests. One command starts everything locally, and 31 automated tests prove it works.
 
 | Demo | What it solves | Proof |
@@ -15,6 +17,7 @@ Built on n8n 2.40.5 and Postgres 17. Full test output: [docs/test-report.md](doc
 You need Docker, Node 20+ and bash (Git Bash is fine on Windows).
 
 ```bash
+npm run check                      # static checks, no Docker needed, a few seconds
 bash scripts/setup.sh              # starts n8n + Postgres, loads data, imports and publishes 13 workflows
 node tests/run-all.mjs             # 30 end-to-end tests, about 80 seconds
 bash scripts/test-llm-mock.sh      # the LLM branch, against an OpenAI-compatible mock
@@ -191,7 +194,7 @@ db/            schema, business logic (SQL functions) and seed data
 src/code/      JavaScript for the Code nodes, one file per node
 src/workflows/ workflow definitions in JavaScript
 workflows/     the generated n8n JSON (import these into any n8n)
-scripts/       setup, workflow build, sample data generator
+scripts/       setup, workflow build, static checks, sample data generator
 tests/         end-to-end tests against the running stack
 ```
 
@@ -201,7 +204,7 @@ tests/         end-to-end tests against the running stack
 
 **Operations.** Every workflow reports failures to one error workflow, which logs to `ops.workflow_errors` and raises an alert. Sticky notes on each canvas explain the design for whoever maintains it next.
 
-**Taking it to production** I would add queue mode with separate workers (Redis), external task runners, Postgres backups, n8n metrics into Prometheus/Grafana, and real alert channels (Slack, PagerDuty) in place of the alert table. `.github/workflows/ci.yml` runs the same setup and test suite on every push.
+**Taking it to production** I would add queue mode with separate workers (Redis), external task runners, Postgres backups, n8n metrics into Prometheus/Grafana, and real alert channels (Slack, PagerDuty) in place of the alert table. `.github/workflows/ci.yml` runs on every pull request and on `main`: first the static checks (Code node syntax, and a guard that the generated JSON in `workflows/` still matches `src/`), then the same setup and test suite you run locally, with the test report kept as a build artifact.
 
 ## About
 
