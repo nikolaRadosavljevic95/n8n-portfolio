@@ -1,0 +1,469 @@
+{
+  "id": "PfVoiceTools0001",
+  "name": "Voice: Tool calls (Vapi / Retell)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "voice/vapi",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "99425ea4-7bd5-48cd-a946-6434fda89713",
+      "name": "POST /voice/vapi",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "674dc811-ef37-4d6f-af07-b1f2743576ac"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "voice/retell",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d4197860-b170-4c8f-ac42-f9167b52d309",
+      "name": "POST /voice/retell",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        200
+      ],
+      "webhookId": "30b52461-a57b-4f83-a3d5-e9bf9a4f6c67"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const crypto = require('crypto');\n\nconst item = $input.first();\nconst headers = item.json.headers || {};\nconst body = item.json.body || {};\n\nconst secret = String($env.VOICE_WEBHOOK_SECRET || '');\nconst provided = String(headers['x-vapi-secret'] || headers['x-voice-secret'] || '');\nconst authOk = secret.length > 0\n  && provided.length === secret.length\n  && crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(secret));\n\nconst parseArgs = (raw) => {\n  if (!raw) return {};\n  if (typeof raw === 'string') {\n    try { return JSON.parse(raw); } catch (e) { return {}; }\n  }\n  return raw;\n};\nconst toIso = (v) => (v === undefined || v === null ? null : typeof v === 'number' ? new Date(v).toISOString() : v);\n\nconst out = { provider: null, kind: 'ignored', auth_ok: authOk, call_id: null, caller_phone: null, tool_calls: [], report: null };\n\nif (body.message && typeof body.message === 'object') {\n  const m = body.message;\n  out.provider = 'vapi';\n  out.call_id = m.call?.id ?? null;\n  out.caller_phone = m.customer?.number ?? m.call?.customer?.number ?? null;\n  if (m.type === 'tool-calls') {\n    out.kind = 'tool-calls';\n    const list = m.toolCallList ?? (m.toolWithToolCallList || []).map((t) => t.toolCall);\n    out.tool_calls = (list || []).map((tc) => ({\n      id: tc.id,\n      name: tc.function?.name ?? tc.name,\n      args: parseArgs(tc.function?.arguments ?? tc.arguments),\n    }));\n  } else if (m.type === 'end-of-call-report') {\n    out.kind = 'end-of-call';\n    out.report = {\n      provider: 'vapi',\n      call_id: out.call_id,\n      caller_phone: out.caller_phone,\n      started_at: toIso(m.startedAt ?? m.call?.startedAt),\n      ended_at: toIso(m.endedAt ?? m.call?.endedAt),\n      ended_reason: m.endedReason ?? null,\n      summary: m.analysis?.summary ?? m.summary ?? null,\n      transcript: m.artifact?.transcript ?? m.transcript ?? null,\n      recording_url: m.artifact?.recordingUrl ?? m.recordingUrl ?? null,\n    };\n  }\n} else if (body.name && body.call) {\n  out.provider = 'retell';\n  out.kind = 'tool-calls';\n  out.call_id = body.call.call_id ?? null;\n  out.caller_phone = body.call.from_number ?? null;\n  const args = parseArgs(body.args);\n  const fingerprint = crypto.createHash('sha1').update(JSON.stringify(args)).digest('hex').slice(0, 16);\n  out.tool_calls = [{ id: `retell:${out.call_id}:${body.name}:${fingerprint}`, name: body.name, args }];\n} else if (body.event && body.call) {\n  out.provider = 'retell';\n  out.call_id = body.call.call_id ?? null;\n  out.caller_phone = body.call.from_number ?? null;\n  if (body.event === 'call_analyzed' || body.event === 'call_ended') {\n    out.kind = 'end-of-call';\n    out.report = {\n      provider: 'retell',\n      call_id: out.call_id,\n      caller_phone: out.caller_phone,\n      started_at: toIso(body.call.start_timestamp),\n      ended_at: toIso(body.call.end_timestamp),\n      ended_reason: body.call.disconnection_reason ?? null,\n      summary: body.call.call_analysis?.call_summary ?? null,\n      transcript: body.call.transcript ?? null,\n      recording_url: body.call.recording_url ?? null,\n    };\n  }\n}\n\nreturn [{ json: out }];"
+      },
+      "id": "d7a1ad1d-76c5-4e74-af20-fd904fb05984",
+      "name": "Normalize provider payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "8b1a6d5c-f0bd-173b-6f5a-cc5a1b1013a6",
+              "leftValue": "={{ $json.auth_ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "6c7d5ee0-f23d-44c3-ad7a-fdb6517a6f99",
+      "name": "Authorized?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        460,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'unauthorized' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "bb109507-3750-4599-a0a3-e83ec6a8a129",
+      "name": "Respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        700,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "1570c896-22de-712a-a06e-669e0b85dd6f",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "tool-calls",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "tool-calls"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "279179a7-03da-cda4-aeea-4d3d2c5ebaf7",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "end-of-call",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "end-of-call"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "other"
+        }
+      },
+      "id": "698703cc-5e48-44ac-a449-49fa1cd87d22",
+      "name": "Message type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        700,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const n = $input.first().json;\nconst calls = n.tool_calls.length ? n.tool_calls : [{ id: null, name: '__none__', args: {} }];\n\nreturn calls.map((tc) => ({\n  json: {\n    provider: n.provider,\n    call_id: n.call_id,\n    caller_phone: n.caller_phone,\n    tool_call_id: tc.id,\n    tool: tc.name,\n    args: tc.args || {},\n  },\n}));"
+      },
+      "id": "b7bc4e00-b297-4b97-a218-7b9141507652",
+      "name": "Split tool calls",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT booking.handle_tool($1, $2, $3, $4, $5::jsonb, $6::jsonb) AS result;",
+        "options": {
+          "queryReplacement": "={{ [ $json.provider, $json.tool_call_id, $json.call_id, $json.tool, JSON.stringify($json.args ?? {}), JSON.stringify({ caller_phone: $json.caller_phone }) ] }}",
+          "queryBatching": "independently"
+        }
+      },
+      "id": "8ed093d9-72e1-4fa0-aac1-0191bb0afc07",
+      "name": "Run tool (Postgres)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1180,
+        -80
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgAppsCred000001",
+          "name": "Apps DB (Postgres)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const calls = $('Split tool calls').all().map((i) => i.json);\nconst results = $input.all().map((i, idx) => ({ call: calls[idx], result: i.json.result }));\n\nif (calls[0]?.provider === 'vapi') {\n  return [{\n    json: {\n      body: {\n        results: results.map((r) => ({ toolCallId: r.call.tool_call_id, result: JSON.stringify(r.result) })),\n      },\n    },\n  }];\n}\n\nreturn [{ json: { body: results[0]?.result ?? { status: 'error', message: 'No tool call in request' } } }];"
+      },
+      "id": "ba17f685-8a88-4c50-a0d6-734871c30d22",
+      "name": "Shape provider response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.body }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "9fa2ad1b-cd78-4114-ae6e-bdbffded0a39",
+      "name": "Respond to voice platform",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1620,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { received: true } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "815c4234-ae16-468f-a38d-c717394a7263",
+      "name": "Acknowledge report",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        960,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PfVoiceAfterCall1",
+          "mode": "list",
+          "cachedResultName": "Voice: After-call & SMS outbox"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "id": "0cb7ee8f-3142-4844-a8f2-ed9dd19b0735",
+      "name": "Record call (async)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1180,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { received: true, ignored: true } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "ebd73d05-943e-43cf-a1b5-e88f74332b2d",
+      "name": "Respond ignored",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        960,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Backend for an AI phone receptionist\nVapi and Retell call these webhooks when the voice agent uses a tool: `check_availability`, `book_appointment`, `find_appointments`, `cancel_appointment`, `reschedule_appointment`.\n\nBoth providers go through one adapter, so the booking logic does not care which one you use. Requests without the shared secret (`x-vapi-secret` / `x-voice-secret`) get a 401.",
+        "height": 220,
+        "width": 520,
+        "color": 7
+      },
+      "id": "d6d93b99-9cd5-40c0-a605-6ce34144ca13",
+      "name": "Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Hot path: under 100 ms\nThe caller is waiting on the line, so the response path is only adapter, SQL, reply. Anything slow (CRM, SMS) happens after the reply or asynchronously.\n\n**Correctness lives in Postgres**\n- `EXCLUDE` constraint: two overlapping bookings for one stylist cannot exist, even under concurrent calls\n- Voice platforms retry on timeouts. The tool call id makes every call idempotent, so a retry never double books\n- Callers can only cancel or move their own bookings (matched by caller ID)",
+        "height": 280,
+        "width": 560,
+        "color": 5
+      },
+      "id": "3c65e93c-806e-49f0-a3c8-6a2184d351bf",
+      "name": "Note 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        920,
+        -420
+      ]
+    }
+  ],
+  "connections": {
+    "POST /voice/vapi": {
+      "main": [
+        [
+          {
+            "node": "Normalize provider payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /voice/retell": {
+      "main": [
+        [
+          {
+            "node": "Normalize provider payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize provider payload": {
+      "main": [
+        [
+          {
+            "node": "Authorized?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized?": {
+      "main": [
+        [
+          {
+            "node": "Message type",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message type": {
+      "main": [
+        [
+          {
+            "node": "Split tool calls",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Acknowledge report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond ignored",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split tool calls": {
+      "main": [
+        [
+          {
+            "node": "Run tool (Postgres)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run tool (Postgres)": {
+      "main": [
+        [
+          {
+            "node": "Shape provider response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape provider response": {
+      "main": [
+        [
+          {
+            "node": "Respond to voice platform",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acknowledge report": {
+      "main": [
+        [
+          {
+            "node": "Record call (async)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "PfOpsErrorHandlr"
+  },
+  "pinData": {},
+  "active": false
+}

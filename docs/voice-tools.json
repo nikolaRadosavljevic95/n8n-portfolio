@@ -1,0 +1,73 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "check_availability",
+      "description": "Find up to three free appointment times for a service. Call this before offering times to the caller.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "service": { "type": "string", "description": "Service the caller wants, in their words, e.g. \"ladies cut\" or \"beard trim\"" },
+          "date": { "type": "string", "description": "Preferred day as YYYY-MM-DD. Omit to search the next 7 days." },
+          "part_of_day": { "type": "string", "enum": ["morning", "afternoon", "evening", "any"] },
+          "around": { "type": "string", "description": "Preferred time as HH:MM, if the caller named one" },
+          "staff": { "type": "string", "description": "Preferred stylist name, if any" }
+        },
+        "required": ["service"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "book_appointment",
+      "description": "Book one of the times returned by check_availability, after the caller confirmed it and gave their name.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "service": { "type": "string" },
+          "start": { "type": "string", "description": "The start value of the chosen slot, e.g. 2026-09-24T14:00" },
+          "staff_id": { "type": "integer", "description": "staff_id of the chosen slot" },
+          "customer_name": { "type": "string" },
+          "phone": { "type": "string", "description": "Only if different from the number the caller is calling from" },
+          "notes": { "type": "string" }
+        },
+        "required": ["service", "start", "customer_name"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "find_appointments",
+      "description": "List the caller's upcoming bookings, identified by the number they are calling from.",
+      "parameters": { "type": "object", "properties": {} }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "cancel_appointment",
+      "description": "Cancel one of the caller's upcoming bookings. Without a reference, cancels the only booking or asks which one.",
+      "parameters": {
+        "type": "object",
+        "properties": { "ref": { "type": "string", "description": "Booking reference, e.g. 7A3896" } }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "reschedule_appointment",
+      "description": "Move one of the caller's bookings to a new time. Check availability first.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "ref": { "type": "string" },
+          "new_start": { "type": "string", "description": "New start as YYYY-MM-DDTHH:MM" }
+        },
+        "required": ["new_start"]
+      }
+    }
+  }
+]

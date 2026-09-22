@@ -1,0 +1,321 @@
+{
+  "id": "PfVoiceAfterCall1",
+  "name": "Voice: After-call & SMS outbox",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "8823b724-afd3-48c9-a8ef-e3aac408fec8",
+      "name": "When called with a call report",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT booking.record_call($1::jsonb) AS result;",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($json.report) ] }}"
+        }
+      },
+      "id": "3f3ab378-6486-4e20-a5ff-e27c37525122",
+      "name": "Record call & update CRM",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        240,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgAppsCred000001",
+          "name": "Apps DB (Postgres)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 20
+            }
+          ]
+        }
+      },
+      "id": "ba50ef9e-57fa-44f1-a57e-f3a3768d2c77",
+      "name": "Every 20 seconds",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM booking.claim_outbox(20);",
+        "options": {}
+      },
+      "id": "f19acbbc-75ea-40b9-a068-b95fe19516f0",
+      "name": "Claim due SMS",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        240,
+        320
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgAppsCred000001",
+          "name": "Apps DB (Postgres)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "08723f59-4004-6d4e-e778-81dac46d7f8d",
+              "leftValue": "={{ $env.SMS_PROVIDER === 'twilio' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "91fede16-4d2a-43da-aade-6873ac80d9ea",
+      "name": "Twilio configured?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        460,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_FROM }}",
+        "to": "={{ $json.recipient }}",
+        "message": "={{ $json.message }}",
+        "options": {}
+      },
+      "id": "e6d3b5fb-4520-4e8b-af39-8413c4c5102c",
+      "name": "Send SMS (Twilio)",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        700,
+        220
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "twilioCred000001",
+          "name": "Twilio"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const claimed = $('Claim due SMS').all().map((i) => i.json);\n\nreturn $input.all().map((i, idx) => ({\n  json: {\n    id: claimed[idx]?.id,\n    ok: !i.json.error,\n    provider_ref: i.json.sid ?? null,\n    error: i.json.error ? String(i.json.error.message ?? i.json.error) : null,\n  },\n}));"
+      },
+      "id": "a930362a-bec0-4de9-a680-b9ada1f08e61",
+      "name": "Twilio result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return $input.all().map((i) => {\n  const m = i.json;\n  const fail = /0000$/.test(m.recipient);\n  return {\n    json: {\n      id: m.id,\n      ok: !fail,\n      provider_ref: fail ? null : `mock-${m.id}-${Date.now()}`,\n      error: fail ? 'Mock gateway: number unreachable' : null,\n    },\n  };\n});"
+      },
+      "id": "e620ceaa-bd7f-4458-adc8-e703b32587de",
+      "name": "Mock SMS gateway",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT booking.finish_outbox($1::bigint, $2::boolean, $3, $4) AS result;",
+        "options": {
+          "queryReplacement": "={{ [ $json.id, $json.ok, $json.provider_ref, $json.error ] }}",
+          "queryBatching": "independently"
+        }
+      },
+      "id": "d787b820-6111-45dd-a895-8076943da4dd",
+      "name": "Mark sent or schedule retry",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1160,
+        320
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgAppsCred000001",
+          "name": "Apps DB (Postgres)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## After the call\nThe outcome is derived from what actually happened (tool calls stored in the DB), not from the LLM summary: booked, rescheduled, cancelled, enquiry without booking, no conversation.\n\nThe caller is upserted into the CRM (dedupe by E.164 phone number). An enquiry without a booking creates a follow-up task for the front desk.\n\nSwap the SQL CRM for HubSpot / Pipedrive by replacing one node.",
+        "height": 250,
+        "width": 520,
+        "color": 7
+      },
+      "id": "70edbbd4-fead-4b4d-a7b7-78370d7ec238",
+      "name": "Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Transactional outbox for SMS\nConfirmations are written in the same DB transaction as the booking, so a booking never exists without its SMS and vice versa.\n\nThis dispatcher claims due messages with `FOR UPDATE SKIP LOCKED` (safe with several n8n workers), sends them, and retries with exponential backoff. After 5 failures an alert is raised.\n\nSet `SMS_PROVIDER=twilio` to use the Twilio branch, otherwise a mock gateway is used.",
+        "height": 250,
+        "width": 560,
+        "color": 6
+      },
+      "id": "40458edb-a3d0-4f52-a145-e46659526a31",
+      "name": "Note 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        440,
+        560
+      ]
+    }
+  ],
+  "connections": {
+    "When called with a call report": {
+      "main": [
+        [
+          {
+            "node": "Record call & update CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 20 seconds": {
+      "main": [
+        [
+          {
+            "node": "Claim due SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim due SMS": {
+      "main": [
+        [
+          {
+            "node": "Twilio configured?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Twilio configured?": {
+      "main": [
+        [
+          {
+            "node": "Send SMS (Twilio)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mock SMS gateway",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS (Twilio)": {
+      "main": [
+        [
+          {
+            "node": "Twilio result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Twilio result": {
+      "main": [
+        [
+          {
+            "node": "Mark sent or schedule retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock SMS gateway": {
+      "main": [
+        [
+          {
+            "node": "Mark sent or schedule retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "PfOpsErrorHandlr"
+  },
+  "pinData": {},
+  "active": false
+}
