@@ -1,0 +1,30 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Start stack, import and publish workflows
+        run: bash scripts/setup.sh
+      - name: End-to-end tests
+        run: node tests/run-all.mjs
+      - name: LLM path against the mock
+        run: bash scripts/test-llm-mock.sh
+      - name: Keep the test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: tests/output/
+      - name: n8n logs on failure
+        if: failure()
+        run: docker logs n8n-portfolio-n8n-1 --tail 300
