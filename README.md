@@ -20,7 +20,7 @@ You need Docker, Node 20+ and bash (Git Bash is fine on Windows).
 ```bash
 npm run check                      # static checks, no Docker needed, a few seconds
 bash scripts/setup.sh              # starts n8n + Postgres, loads data, imports and publishes 16 workflows
-node tests/run-all.mjs             # 46 end-to-end tests (the report prints the exact time)
+node tests/run-all.mjs             # 46 end-to-end tests, about 75 seconds
 bash scripts/test-llm-mock.sh      # the LLM branch, against an OpenAI-compatible mock
 ```
 
