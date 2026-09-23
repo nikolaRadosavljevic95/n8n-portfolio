@@ -1,0 +1,693 @@
+{
+  "id": "PfAgentApproval1",
+  "name": "Agent: Approvals and audit API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "agent/approvals",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e310b9ea-b63d-492c-a4a1-4a780d87c47e",
+      "name": "GET /agent/approvals",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "39803e38-6246-4068-ab3c-3347c8cb9269"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const crypto = require('crypto');\n\nconst item = $input.first();\nconst expected = String($env.ADMIN_API_TOKEN || '');\nconst provided = String(item.json.headers?.['x-admin-token'] || '');\nconst ok = expected.length > 0\n  && provided.length === expected.length\n  && crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));\n\nreturn [{ json: { ...item.json, authorized: ok } }];"
+      },
+      "id": "8dcfa4c5-6ee7-43fb-a297-bbe1530a54e1",
+      "name": "Authorize (list)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "fc515a83-01d5-4583-cf75-d32fb4b38e5b",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "bc2bae70-66ee-43da-a13d-540352c66562",
+      "name": "Token ok? (list)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT jsonb_build_object('pending', agent.pending_approvals(), 'health', agent.health()) AS r;",
+        "options": {}
+      },
+      "id": "3af9e5bf-57e3-42f9-ac5c-e46d634bfcfa",
+      "name": "Pending queue",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        660,
+        -80
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgAppsCred000001",
+          "name": "Apps DB (Postgres)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.r }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "11cd4dfc-54ab-43a4-a969-98d46fab1aca",
+      "name": "Respond queue",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        880,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'unauthorized' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "56b998c0-8973-4135-ac4b-47ef67c59fca",
+      "name": "Respond 401 (list)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        660,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent/approvals/decide",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a44a4387-1a98-4623-a8d4-7f7c0fff0a5e",
+      "name": "POST /agent/approvals/decide",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        320
+      ],
+      "webhookId": "39f29167-7908-4db7-abce-79a559a7faff"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const crypto = require('crypto');\n\nconst item = $input.first();\nconst expected = String($env.ADMIN_API_TOKEN || '');\nconst provided = String(item.json.headers?.['x-admin-token'] || '');\nconst ok = expected.length > 0\n  && provided.length === expected.length\n  && crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));\n\nreturn [{ json: { ...item.json, authorized: ok } }];"
+      },
+      "id": "624f53bf-32a0-4836-aac8-d4a634863d52",
+      "name": "Authorize (decide)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "fc515a83-01d5-4583-cf75-d32fb4b38e5b",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "f4937cd4-882c-4692-abcc-312d54f2c7e2",
+      "name": "Token ok? (decide)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        440,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT agent.decide_approval($1::bigint, $2, $3) AS r;",
+        "options": {
+          "queryReplacement": "={{ [ $json.body?.approval_id ?? 0, String($json.body?.decision ?? ''), String($json.body?.decided_by ?? 'admin') ] }}"
+        }
+      },
+      "id": "bd463b21-ee0c-4ec6-ad88-00a716490a64",
+      "name": "Apply decision",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        660,
+        240
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgAppsCred000001",
+          "name": "Apps DB (Postgres)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c1983362-dba9-1e78-5a02-d15d1ac57674",
+              "leftValue": "={{ $json.r.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "fac68626-424a-4087-aa60-3f6b66339a7d",
+      "name": "Decision applied?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        880,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.r }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "0e0873d5-3303-4274-a25b-b5aded4d727e",
+      "name": "Respond decision",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1100,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: $json.r.error } }}",
+        "options": {
+          "responseCode": 422
+        }
+      },
+      "id": "a641890a-40b5-4017-a9ae-9b2360cedc1d",
+      "name": "Respond 422 (decide)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1100,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'unauthorized' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "2ea0945e-4100-43af-a11c-f4befc91ba96",
+      "name": "Respond 401 (decide)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        660,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "agent/runs/trace",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "44bd3f8c-e561-48ad-a50f-2d9c477c8940",
+      "name": "GET /agent/runs/trace",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        640
+      ],
+      "webhookId": "30a52d26-1660-48a5-a335-6ed59f031dfd"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const crypto = require('crypto');\n\nconst item = $input.first();\nconst expected = String($env.ADMIN_API_TOKEN || '');\nconst provided = String(item.json.headers?.['x-admin-token'] || '');\nconst ok = expected.length > 0\n  && provided.length === expected.length\n  && crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));\n\nreturn [{ json: { ...item.json, authorized: ok } }];"
+      },
+      "id": "5b8e8a63-11ba-4433-a2bb-5f0680a6ed0a",
+      "name": "Authorize (trace)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "fc515a83-01d5-4583-cf75-d32fb4b38e5b",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "faba44dd-1063-46b1-a169-5dce1b43b054",
+      "name": "Token ok? (trace)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        440,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT agent.run_trace($1::bigint) AS r;",
+        "options": {
+          "queryReplacement": "={{ [ Number($json.query?.run_id ?? 0) ] }}"
+        }
+      },
+      "id": "bd3c36f7-f92d-473c-a5ca-67b959099142",
+      "name": "Read the audit trail",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        660,
+        560
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgAppsCred000001",
+          "name": "Apps DB (Postgres)"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "adb128c1-e70e-9071-d57a-ab793f933913",
+              "leftValue": "={{ !!$json.r }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "18b9980b-7837-4b68-ad79-ce985822111b",
+      "name": "Run exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        880,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.r }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "389b6c84-d4ac-47b2-ad25-282aa644eb1f",
+      "name": "Respond trace",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1100,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'run_not_found' } }}",
+        "options": {
+          "responseCode": 404
+        }
+      },
+      "id": "cfdfe9d7-3a35-4c8e-aa37-12e423b51a2c",
+      "name": "Respond 404 (trace)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1100,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'unauthorized' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "1beddbb3-4ac8-46bb-ac5f-828dda7d6d29",
+      "name": "Respond 401 (trace)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        660,
+        740
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## What a person sees (header `x-admin-token`)\n`GET /webhook/agent/approvals` - everything the agent asked permission for, with the customer, the order, the amount and the message that led to it.\n\n`POST /webhook/agent/approvals/decide` `{ approval_id, decision, decided_by }` - releases it. The money rules are checked **again** at this moment, because the order may have changed since the agent asked.\n\n`GET /webhook/agent/runs/trace?run_id=N` - the whole run, step by step: every model turn, every tool call, every refusal.\n\nIn production these back an inbox view in the support tool.",
+        "height": 340,
+        "width": 620,
+        "color": 7
+      },
+      "id": "45d7cd4f-23c6-4c73-a753-9288714cf7ad",
+      "name": "Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -320
+      ]
+    }
+  ],
+  "connections": {
+    "GET /agent/approvals": {
+      "main": [
+        [
+          {
+            "node": "Authorize (list)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorize (list)": {
+      "main": [
+        [
+          {
+            "node": "Token ok? (list)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Token ok? (list)": {
+      "main": [
+        [
+          {
+            "node": "Pending queue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401 (list)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pending queue": {
+      "main": [
+        [
+          {
+            "node": "Respond queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /agent/approvals/decide": {
+      "main": [
+        [
+          {
+            "node": "Authorize (decide)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorize (decide)": {
+      "main": [
+        [
+          {
+            "node": "Token ok? (decide)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Token ok? (decide)": {
+      "main": [
+        [
+          {
+            "node": "Apply decision",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401 (decide)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply decision": {
+      "main": [
+        [
+          {
+            "node": "Decision applied?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decision applied?": {
+      "main": [
+        [
+          {
+            "node": "Respond decision",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 422 (decide)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET /agent/runs/trace": {
+      "main": [
+        [
+          {
+            "node": "Authorize (trace)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorize (trace)": {
+      "main": [
+        [
+          {
+            "node": "Token ok? (trace)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Token ok? (trace)": {
+      "main": [
+        [
+          {
+            "node": "Read the audit trail",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401 (trace)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the audit trail": {
+      "main": [
+        [
+          {
+            "node": "Run exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run exists?": {
+      "main": [
+        [
+          {
+            "node": "Respond trace",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 404 (trace)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "PfOpsErrorHandlr"
+  },
+  "pinData": {},
+  "active": false
+}

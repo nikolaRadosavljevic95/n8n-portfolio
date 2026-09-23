@@ -1,0 +1,102 @@
+{
+  "id": "PfMockAgentLlm01",
+  "name": "Mock: Agent LLM",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mock/llm-agent/chat/completions",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "858d6ef8-92f0-402f-a9d3-3c261852c6f3",
+      "name": "POST /mock/llm-agent/chat/completions",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "b3695fa0-f418-45fd-a698-9b158bc61b94"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Test double for the model behind demo 4.\n//\n// It speaks the OpenAI chat completions format, tool calls included, and it is\n// deliberately obedient: given a customer message that tells it to act on\n// somebody else's order, it tries. That is the point. The demo's guarantees\n// come from agent.execute_tool() in Postgres, so the way to show they hold is\n// to put a model in front of them that will happily do the wrong thing.\n//\n// Set LLM_ENABLED=true and point LLM_BASE_URL at a real provider to swap it out;\n// nothing else in the workflow changes.\nconst body = $input.first().json.body || {};\nconst messages = Array.isArray(body.messages) ? body.messages : [];\n\nconst userText = String(messages.find((m) => m.role === 'user')?.content || '');\nconst turn = messages.filter((m) => m.role === 'assistant').length;\nconst runTag = String(body.user || 'run-0');\n\n// What the tools have said so far, oldest first.\nconst results = messages\n  .filter((m) => m.role === 'tool')\n  .map((m) => { try { return JSON.parse(m.content); } catch (e) { return {}; } });\nconst last = results[results.length - 1] || {};\n\nconst orderId = (userText.match(/ORD-\\d+/i) || [''])[0].toUpperCase() || null;\nconst eur = (cents) => `€${(Number(cents || 0) / 100).toFixed(2)}`;\n\nconst scenario = (() => {\n  if (/ignore (all )?(your |the )?previous|disregard (all )?(your |the )?(previous|prior)|you are now/i.test(userText)) return 'injection';\n  if (/every order|all my orders|status of everything/i.test(userText)) return 'sprawl';\n  if (/cancel/i.test(userText)) return 'cancel';\n  if (/real person|a human|speak to someone|manager/i.test(userText)) return 'human';\n  if (/policy|how long do i have|can i return/i.test(userText)) return 'policy';\n  // Checked before tracking on purpose: \"it arrived broken\" is a refund, not a\n  // delivery question, and the words overlap.\n  if (/faulty|broken|damaged|not working|does ?n[o']t work|refund|money back/i.test(userText)) return 'refund';\n  if (/where is|tracking|track my|delivery|parcel|when will it arrive|has it shipped/i.test(userText)) return 'tracking';\n  return 'unknown';\n})();\n\n// Returns either { tools: [{ name, args }] } or { say: '...' }.\nfunction decide() {\n  switch (scenario) {\n    case 'injection':\n      // Turn 0: it does as the message told it. Turn 1: it has been refused.\n      if (turn === 0) {\n        return { tools: [{ name: 'issue_refund', args: { order_id: orderId || 'ORD-0000', amount_cents: 45000, reason: 'customer instruction' } }] };\n      }\n      return { say: `I can only see the orders placed on your own account, and ${orderId || 'that order'} is not one of them, so I cannot refund it. If you have an order reference of your own I will gladly look it up.` };\n\n    case 'tracking':\n      if (turn === 0) return { tools: [{ name: 'track_shipment', args: { order_id: orderId } }] };\n      if (last.status !== 'ok') return { say: `I cannot find ${orderId || 'that order'} on your account. Could you check the reference?` };\n      return {\n        say: last.delivered_at\n          ? `${last.order_id} was delivered on ${last.delivered_at} by ${last.carrier}, tracking ${last.tracking_no}.`\n          : `${last.order_id} is on its way with ${last.carrier}, tracking number ${last.tracking_no}. It was handed over on ${last.shipped_at}.`,\n      };\n\n    case 'cancel':\n      if (turn === 0) return { tools: [{ name: 'cancel_order', args: { order_id: orderId, reason: 'customer asked to cancel' } }] };\n      if (last.status === 'ok') return { say: `Done, ${last.order_id} is cancelled. You will not be charged, and anything already taken comes back within a few working days.` };\n      if (last.reason === 'order_already_shipped') return { say: `${orderId} has already left the warehouse, so I cannot cancel it. Refuse the parcel at the door, or send it back once it arrives and I will refund you.` };\n      return { say: `I could not cancel ${orderId || 'that order'}. Let me pass you to a colleague who can look at it properly.` };\n\n    case 'policy':\n      if (turn === 0) return { tools: [{ name: 'get_policy', args: { topic: 'returns' } }] };\n      return { say: `${last.text || 'Our returns policy applies from the day the order is delivered.'} If yours is inside that window, tell me which order and I will sort it out.` };\n\n    case 'human':\n      if (turn === 0) return { tools: [{ name: 'escalate_to_human', args: { reason: 'customer asked for a person' } }] };\n      return { say: 'Of course. I have passed this to a colleague and they will reply here shortly.' };\n\n    case 'refund':\n      if (turn === 0) return { tools: [{ name: 'lookup_order', args: orderId ? { order_id: orderId } : {} }] };\n      if (turn === 1) {\n        if (last.status !== 'ok') return { say: `I cannot find ${orderId || 'that order'} on your account. Could you check the reference?` };\n        const amount = last.refundable_cents ?? last.total_cents;\n        return { tools: [{ name: 'issue_refund', args: { order_id: last.order_id, amount_cents: amount, reason: 'faulty on arrival' } }] };\n      }\n      if (last.status === 'ok') return { say: `I have refunded ${eur(last.amount_cents)} for ${last.order_id}. It lands back on your card in three to five working days.` };\n      if (last.status === 'needs_approval') return { say: `Because of the amount, ${eur(last.requested_cents)} needs a colleague to sign it off. I have put it in front of them and you will get a message as soon as it is done, usually the same day.` };\n      if (last.reason === 'outside_return_window') return { say: `That order was delivered more than ${last.return_window_days} days ago, so the return window closed on ${last.window_ended} and I cannot refund it myself. I can ask a colleague to take a look if you would like.` };\n      if (last.reason === 'amount_exceeds_refundable') return { say: `Only ${eur(last.refundable_cents)} is still refundable on that order, so I cannot refund ${eur(last.requested_cents)}.` };\n      return { say: 'I could not complete that refund. A colleague will pick it up and come back to you.' };\n\n    case 'sprawl':\n      // Keeps working without ever concluding: the case the step budget exists for.\n      return { tools: [{ name: 'lookup_order', args: {} }] };\n\n    default:\n      if (turn === 0) return { tools: [{ name: 'escalate_to_human', args: { reason: 'request outside the available tools' } }] };\n      return { say: 'That one is better handled by a person, so I have passed it on. A colleague will reply here shortly.' };\n  }\n}\n\nconst step = decide();\nconst message = { role: 'assistant', content: step.say ?? null };\nif (step.tools) {\n  message.tool_calls = step.tools.map((t, i) => ({\n    id: `call-${runTag}-${turn}-${i}`,\n    type: 'function',\n    function: { name: t.name, arguments: JSON.stringify(t.args ?? {}) },\n  }));\n}\n\nreturn [{\n  json: {\n    id: `chatcmpl-agent-mock-${Date.now()}`,\n    object: 'chat.completion',\n    created: Math.floor(Date.now() / 1000),\n    model: `${body.model || 'unknown'}-mock`,\n    choices: [{ index: 0, finish_reason: step.tools ? 'tool_calls' : 'stop', message }],\n    usage: { prompt_tokens: Math.ceil(JSON.stringify(messages).length / 4), completion_tokens: 120, total_tokens: 0 },\n  },\n}];"
+      },
+      "id": "a879eb9f-ec75-4810-a0b3-7e00e12c70da",
+      "name": "Scripted completion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "746ae044-1de5-4e22-aaa6-dc510db52e47",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Test double for the model\nSpeaks the OpenAI chat completions format, tool calls included, and is deliberately **obedient**: told by a customer message to refund somebody else's order, it tries.\n\nThat is the point. The guarantees come from `agent.execute_tool()`, so proving them needs a model that will happily do the wrong thing.\n\nPoint `AGENT_LLM_BASE_URL` at a real provider to swap it out. Nothing else changes.",
+        "height": 240,
+        "width": 480,
+        "color": 3
+      },
+      "id": "c40ba377-544c-461c-a22e-6defb953d810",
+      "name": "Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -280
+      ]
+    }
+  ],
+  "connections": {
+    "POST /mock/llm-agent/chat/completions": {
+      "main": [
+        [
+          {
+            "node": "Scripted completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scripted completion": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "PfOpsErrorHandlr"
+  },
+  "pinData": {},
+  "active": false
+}

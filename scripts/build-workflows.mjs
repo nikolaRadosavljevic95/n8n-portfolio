@@ -4,7 +4,7 @@ import { ROOT } from '../src/lib/wf.mjs';
 import { opsErrorHandler, utilBuildXlsx } from '../src/workflows/shared.mjs';
 
 const workflows = [opsErrorHandler(), utilBuildXlsx()];
-for (const mod of ['rfq.mjs', 'voice.mjs', 'payments.mjs']) {
+for (const mod of ['rfq.mjs', 'voice.mjs', 'payments.mjs', 'agent.mjs']) {
   if (fs.existsSync(path.join(ROOT, 'src', 'workflows', mod))) {
     const m = await import(new URL(`../src/workflows/${mod}`, import.meta.url));
     workflows.push(...m.default());
