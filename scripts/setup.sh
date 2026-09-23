@@ -14,6 +14,7 @@ LLM_ENABLED=false
 VOICE_WEBHOOK_SECRET=$(gen 16)
 PAYMENTS_SIGNING_SECRET=whsec_$(gen 16)
 ADMIN_API_TOKEN=$(gen 16)
+AGENT_API_TOKEN=$(gen 16)
 EOF
   echo "Created .env with random secrets"
 fi
