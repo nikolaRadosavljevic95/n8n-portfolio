@@ -426,7 +426,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// One item per tool call, so the Postgres node runs each one as its own\n// statement and a refusal in the first does not hide the second.\nconst reply = $input.first().json;\n\nreturn reply.tool_calls.map((call) => ({\n  json: {\n    run_id: reply.run_id,\n    tool_call_id: call.id,\n    tool: call.name,\n    args: call.args,\n  },\n}));"
+        "jsCode": "// One item per tool call, so the Postgres node runs each one as its own\n// statement and a refusal in the first does not hide the second.\n//\n// The reply is read from the parse step by name, not from $input: the node\n// feeding this one is the Postgres node that recorded the model turn, so\n// $json here is that insert's result, not the tool calls.\nconst reply = $('Parse LLM reply').first().json;\n\nreturn (reply.tool_calls ?? []).map((call) => ({\n  json: {\n    run_id: reply.run_id,\n    tool_call_id: call.id,\n    tool: call.name,\n    args: call.args,\n  },\n}));"
       },
       "id": "b19c87bc-491e-4f33-a87c-20d8e13614f5",
       "name": "Fan out tool calls",
