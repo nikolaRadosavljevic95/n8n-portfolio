@@ -6,8 +6,8 @@ Four working n8n systems, built the way I would build them for a client: busines
 
 | Demo | What it solves | Proof |
 |---|---|---|
-| [1. RFQ to quote](#1-rfq-to-quote) | A customer sends a PDF request for quotation, sales gets a priced Excel quote back in 2 to 3 seconds, with the uncertain lines separated for review | 12 of 17 lines priced automatically on a messy ERP export, the other 5 flagged with a reason. 7 of 7 on an email list |
-| [2. AI receptionist backend](#2-ai-receptionist-backend-vapi--retell) | The tools a Vapi or Retell voice agent calls to check availability, book, move and cancel appointments | 10 callers racing for one slot: exactly 1 booking. p95 latency 114 ms |
+| [1. RFQ to quote](#1-rfq-to-quote) | A customer sends a PDF request for quotation, sales gets a priced Excel quote back in about a second, with the uncertain lines separated for review | 12 of 17 lines priced automatically on a messy ERP export, the other 5 flagged with a reason. 7 of 7 on an email list |
+| [2. AI receptionist backend](#2-ai-receptionist-backend-vapi--retell) | The tools a Vapi or Retell voice agent calls to check availability, book, move and cancel appointments | 10 callers racing for one slot: exactly 1 booking. p95 latency 113 ms |
 | [3. Payment webhooks to POS](#3-payment-webhooks-to-pos) | Stripe-style payment events turned into fulfilled orders in a POS, without losing or duplicating anything | Duplicates, out-of-order refunds, a flaky POS and a dead POS all handled and tested |
 | [4. Support agent with its hands tied](#4-support-agent-with-its-hands-tied) | An LLM agent that can actually refund, cancel and hand over, with the limits enforced in the database rather than in the prompt | A customer message ordering it to refund a stranger's order: the model obeys, the database refuses, nothing moves. 16 scenarios |
 
@@ -112,7 +112,7 @@ sequenceDiagram
   V->>N: check_availability (x-vapi-secret)
   N->>DB: booking.handle_tool()
   DB-->>N: 3 free times, 60 min apart
-  N-->>V: results in ~90 ms
+  N-->>V: results in ~70 ms
   V->>C: I can offer 12:00 with Ana, 13:00 or 14:00
   C->>V: 12:00 please, I am Jovana
   V->>N: book_appointment (toolCallId)
@@ -130,7 +130,7 @@ sequenceDiagram
 - **Retries are safe.** Voice platforms retry when your webhook is slow. Every tool call is stored by its id, so a retry returns the original answer instead of booking again.
 - **Speakable answers.** At most three options, at least an hour apart, "today" and "tomorrow" instead of dates, prices and duration included, all in the salon's time zone.
 - **Callers only touch their own bookings.** Cancel and reschedule are matched against caller ID. Guessing a reference returns "not found".
-- **Fast hot path.** Adapter, one SQL call, reply: p50 87 ms, p95 114 ms over 30 calls. CRM updates and SMS happen after the reply.
+- **Fast hot path.** Adapter, one SQL call, reply: p50 68 ms, p95 113 ms over 30 calls. CRM updates and SMS happen after the reply.
 - **Outcome from facts, not from the LLM summary.** After the call, the outcome (booked, rescheduled, cancelled, enquiry without booking) is derived from the tool calls that actually happened. The caller is upserted into the CRM by E.164 phone number, and an enquiry without a booking creates a follow-up task.
 - **Transactional outbox for SMS.** Confirmations are written in the same transaction as the booking and sent by a dispatcher with retries and backoff. Set `SMS_PROVIDER=twilio` to use the Twilio branch.
 
@@ -322,6 +322,17 @@ The same reasoning is why demo 4 puts the agent's limits in a SQL function rathe
 ## About
 
 Nikola Radosavljević, software engineer in Belgrade. Six years of .NET, Angular and Azure (Microsoft Certified: Azure Developer Associate), currently working on event-driven microservices with Kafka and Cassandra. I build n8n automations, and AI agents, that can be trusted with money, bookings and customer data.
+
+## Work with me
+
+I take on fixed-price work on n8n systems that already run in production, or are about to:
+
+- **Production and security audit** of your exported workflows: a written report ranked by severity, with a fix plan. No access to your servers or credentials is needed.
+- **Fix sprint**: the fixes from the audit, delivered as workflows-as-code with end-to-end tests like the ones in this repo.
+- **Booking backend for Vapi or Retell voice agents**, built on demo 2 and deployed on your own infrastructure.
+
+<!-- TODO: replace the link below with the Upwork or Contra profile once it is live -->
+Get in touch through my GitHub profile: [github.com/nikolaRadosavljevic95](https://github.com/nikolaRadosavljevic95).
 
 ## License
 

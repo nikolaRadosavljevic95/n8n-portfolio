@@ -2,7 +2,7 @@
   "name": "n8n-portfolio",
   "private": true,
   "type": "module",
-  "description": "Production-style n8n workflows with tests: RFQ to quote, AI receptionist backend, reliable payment webhooks",
+  "description": "Production-style n8n workflows with tests: RFQ to quote, AI receptionist backend, reliable payment webhooks, support agent with database-enforced limits",
   "license": "MIT",
   "scripts": {
     "build": "node scripts/build-workflows.mjs",
