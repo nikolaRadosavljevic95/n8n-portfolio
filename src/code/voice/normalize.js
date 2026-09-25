@@ -2,13 +2,35 @@ const crypto = require('crypto');
 
 const item = $input.first();
 const headers = item.json.headers || {};
-const body = item.json.body || {};
 
+// The Retell webhook keeps the raw body (needed for its signature); parse it when n8n did not.
+const raw = item.binary?.data ? (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8') : null;
+let body = item.json.body && Object.keys(item.json.body).length ? item.json.body : {};
+if (raw && !Object.keys(body).length) {
+  try { body = JSON.parse(raw); } catch (e) { body = {}; }
+}
+
+const sameSecret = (a, b) => a.length > 0 && a.length === b.length
+  && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+
+// Vapi (and anything we configure ourselves) sends the shared secret as a header.
 const secret = String($env.VOICE_WEBHOOK_SECRET || '');
 const provided = String(headers['x-vapi-secret'] || headers['x-voice-secret'] || '');
-const authOk = secret.length > 0
-  && provided.length === secret.length
-  && crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(secret));
+const secretOk = sameSecret(secret, provided);
+
+// Retell cannot add headers to its call events; it signs every request instead:
+// x-retell-signature: v=<timestamp ms>,d=hex(HMAC-SHA256(Retell API key, raw body + timestamp)),
+// valid for 5 minutes. Same scheme as Retell.verify() in the official SDK.
+function retellSignatureOk() {
+  const key = String($env.RETELL_API_KEY || '');
+  const m = /^v=(\d+),d=([0-9a-f]{64})$/i.exec(String(headers['x-retell-signature'] || ''));
+  if (!key || !m || raw === null) return false;
+  if (Math.abs(Date.now() - Number(m[1])) > 5 * 60 * 1000) return false;
+  const expected = crypto.createHmac('sha256', key).update(raw + m[1]).digest('hex');
+  return crypto.timingSafeEqual(Buffer.from(m[2].toLowerCase()), Buffer.from(expected));
+}
+
+const authOk = secretOk || retellSignatureOk();
 
 const parseArgs = (raw) => {
   if (!raw) return {};

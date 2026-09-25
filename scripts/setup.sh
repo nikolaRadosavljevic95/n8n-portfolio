@@ -17,11 +17,12 @@ ADMIN_API_TOKEN=$(gen 16)
 AGENT_API_TOKEN=$(gen 16)
 RFQ_API_TOKEN=$(gen 16)
 RFQ_FORM_PASSWORD=$(gen 8)
+RETELL_API_KEY=key_$(gen 16)
 EOF
   echo "Created .env with random secrets"
 fi
 # Keys added after the first release: append them to an existing .env.
-for key in RFQ_API_TOKEN RFQ_FORM_PASSWORD; do
+for key in RFQ_API_TOKEN RFQ_FORM_PASSWORD RETELL_API_KEY; do
   if ! grep -q "^$key=" .env; then
     echo "$key=$(node -e "console.log(require('crypto').randomBytes(12).toString('hex'))")" >> .env
     echo "Added $key to .env"
