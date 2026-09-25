@@ -1,0 +1,31 @@
+{
+  "ignore": [
+    {
+      "rule": "WEBHOOK-NO-AUTH",
+      "workflow": "Mock: POS API",
+      "reason": "Test double for the point-of-sale system. It only exists in the local test stack and is never deployed."
+    },
+    {
+      "rule": "WEBHOOK-NO-AUTH",
+      "workflow": "Mock: OpenAI-compatible LLM",
+      "reason": "Test double for the LLM provider. It only exists in the local test stack and is never deployed."
+    },
+    {
+      "rule": "WEBHOOK-NO-AUTH",
+      "workflow": "Mock: Agent LLM",
+      "reason": "Test double for the LLM provider. It only exists in the local test stack and is never deployed."
+    },
+    {
+      "rule": "WEBHOOK-NO-IDEMPOTENCY",
+      "workflow": "Agent: Approvals and audit API",
+      "node": "POST /agent/approvals/decide",
+      "reason": "agent.decide_approval() locks the approval row (FOR UPDATE) and refuses a decision that is no longer pending. The end-to-end test 'Approving releases the money exactly once' approves twice and asserts one refund."
+    },
+    {
+      "rule": "WEBHOOK-NO-IDEMPOTENCY",
+      "workflow": "RFQ: API (webhooks)",
+      "node": "POST /rfq/review/resolve",
+      "reason": "rfq.resolve_line() locks the quote, sets the line to the chosen SKU and upserts the customer part number (ON CONFLICT DO UPDATE), so repeating the request gives the same result."
+    }
+  ]
+}

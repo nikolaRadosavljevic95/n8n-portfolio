@@ -33,6 +33,8 @@ jobs:
             echo "::error::workflows/ is out of date. Run 'npm run build' and commit the result."
             exit 1
           fi
+      - name: Production and security check of the workflows (n8n-prodcheck)
+        run: npx --yes github:nikolaRadosavljevic95/n8n-prodcheck#e4c71a5 workflows --ignore .prodcheck-ignore.json --fail-on low
 
   e2e:
     name: End-to-end
