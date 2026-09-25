@@ -5,7 +5,7 @@ const AFTER_CALL_ID = 'PfVoiceAfterCall1';
 function voiceTools() {
   const wf = new Workflow({ id: 'PfVoiceTools0001', name: 'Voice: Tool calls (Vapi / Retell)' });
   add(wf, 'POST /voice/vapi', nodes.webhook('POST', 'voice/vapi'), [0, 0]);
-  add(wf, 'POST /voice/retell', nodes.webhook('POST', 'voice/retell'), [0, 200]);
+  add(wf, 'POST /voice/retell', nodes.webhook('POST', 'voice/retell', { rawBody: true }), [0, 200]);
   add(wf, 'Normalize provider payload', nodes.code(code('voice/normalize.js')), [240, 100]);
   add(wf, 'Authorized?', nodes.ifTrue('={{ $json.auth_ok }}'), [460, 100]);
   add(wf, 'Respond 401', nodes.respondJson("={{ { error: 'unauthorized' } }}", 401), [700, 260]);
@@ -34,7 +34,7 @@ function voiceTools() {
   wf.connect('Acknowledge report', 'Record call (async)');
 
   wf.note(
-    '## Backend for an AI phone receptionist\nVapi and Retell call these webhooks when the voice agent uses a tool: `check_availability`, `book_appointment`, `find_appointments`, `cancel_appointment`, `reschedule_appointment`.\n\nBoth providers go through one adapter, so the booking logic does not care which one you use. Requests without the shared secret (`x-vapi-secret` / `x-voice-secret`) get a 401.',
+    '## Backend for an AI phone receptionist\nVapi and Retell call these webhooks when the voice agent uses a tool: `check_availability`, `book_appointment`, `find_appointments`, `cancel_appointment`, `reschedule_appointment`.\n\nBoth providers go through one adapter, so the booking logic does not care which one you use. Vapi requests carry the shared secret (`x-vapi-secret`). Retell requests are verified by their `x-retell-signature` (HMAC of the raw body with the Retell API key, 5 minute window), because Retell cannot add headers to its call events. Anything else gets a 401.',
     [-40, -320], 520, 220, 7,
   );
   wf.note(

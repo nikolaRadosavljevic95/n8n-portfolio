@@ -311,6 +311,32 @@ async function voiceTests() {
     assert(r.status === 200 && r.body.status === 'ok' && r.body.appointments.length === 2, 'Milica has 2 seeded bookings', r.body);
   });
 
+  await test('voice', 'Retell requests signed with the API key are accepted; forged, stale or altered ones are not', async () => {
+    // Signed exactly like Retell.sign() in the official SDK: v=<ms>,d=hex(HMAC(key, raw + ms)).
+    const signed = (payload, { ts = Date.now(), key = env.RETELL_API_KEY, bodyForSig } = {}) => {
+      const raw = JSON.stringify(payload);
+      const d = crypto.createHmac('sha256', key).update((bodyForSig ?? raw) + ts).digest('hex');
+      return http('POST', '/webhook/voice/retell', { raw, headers: { 'content-type': 'application/json', 'x-retell-signature': `v=${ts},d=${d}` } });
+    };
+    const report = (callId) => ({ event: 'call_ended', call: { call_id: callId, from_number: '+381641112233', start_timestamp: Date.now() - 90000,
+      end_timestamp: Date.now(), disconnection_reason: 'user_hangup', transcript: 'Agent: Hello...' } });
+    const tool = await signed({ call: { call_id: 'retell-signed-1', from_number: '+381641112233' }, name: 'find_appointments', args: {} });
+    assert(tool.status === 200 && tool.body.status === 'ok', 'a signed tool call without the shared secret is accepted', tool.body);
+    const ok = await signed(report('retell-signed-report'));
+    assert(ok.status === 200 && ok.body.received === true, 'a signed call report is acknowledged', ok.body);
+    const forged = await signed(report('retell-forged'), { key: 'not-the-key' });
+    const stale = await signed(report('retell-stale'), { ts: Date.now() - 6 * 60 * 1000 });
+    const altered = await signed(report('retell-altered'), { bodyForSig: JSON.stringify(report('something-else')) });
+    const unsigned = await http('POST', '/webhook/voice/retell', { json: report('retell-unsigned') });
+    for (const [label, r] of [['forged', forged], ['stale', stale], ['altered', altered], ['unsigned', unsigned]]) {
+      assert(r.status === 401, `${label} request should be 401`, r.status);
+    }
+    await eventually(() => sql("SELECT count(*) FROM booking.calls WHERE call_id = 'retell-signed-report'") === '1', { label: 'signed report recorded' });
+    const rejected = sql("SELECT count(*) FROM booking.calls WHERE call_id IN ('retell-forged', 'retell-stale', 'retell-altered', 'retell-unsigned')");
+    assert(rejected === '0', 'nothing from the rejected requests was recorded', rejected);
+    return 'signed tool call + report accepted; forged, stale, altered, unsigned = 401';
+  });
+
   await test('voice', 'End-of-call report updates call log and CRM, without double counting', async () => {
     const report = (callId, phone) => http('POST', '/webhook/voice/vapi', {
       headers: { 'x-vapi-secret': secret },
