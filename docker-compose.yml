@@ -56,6 +56,7 @@ services:
       ADMIN_API_TOKEN: ${ADMIN_API_TOKEN}
       MOCK_POS_URL: http://localhost:5678/webhook/mock/pos/orders
       AGENT_API_TOKEN: ${AGENT_API_TOKEN}
+      RFQ_API_TOKEN: ${RFQ_API_TOKEN}
       AGENT_LLM_BASE_URL: ${AGENT_LLM_BASE_URL:-http://localhost:5678/webhook/mock/llm-agent}
     volumes:
       - n8ndata:/home/node/.n8n
