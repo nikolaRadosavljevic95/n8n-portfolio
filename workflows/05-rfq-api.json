@@ -14,10 +14,76 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        0,
+        -660,
         0
       ],
       "webhookId": "c2e9ddba-1c45-462a-a638-cbb285208010"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// The RFQ API is for the sales team's tools, not the public, so every call\n// carries the x-api-token header. Uploaded files are passed through untouched.\nconst crypto = require('crypto');\n\nconst item = $input.first();\nconst expected = String($env.RFQ_API_TOKEN || '');\nconst provided = String(item.json.headers?.['x-api-token'] || '');\nconst ok = expected.length > 0\n  && provided.length === expected.length\n  && crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));\n\nreturn [{ json: { ...item.json, authorized: ok }, binary: item.binary }];"
+      },
+      "id": "7a541280-2b15-4cf7-aadb-52276a5cc482",
+      "name": "Authorize (quote)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "fc515a83-01d5-4583-cf75-d32fb4b38e5b",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "a74ad22c-0e89-41df-ae21-57fcb5edbca2",
+      "name": "Token ok? (quote)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'unauthorized' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "d2c800c0-b6be-4067-ad3b-be1ae8f5c4da",
+      "name": "Respond 401 (quote)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -220,
+        180
+      ]
     },
     {
       "parameters": {
@@ -274,10 +340,76 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        0,
+        -660,
         440
       ],
       "webhookId": "9c8e50a8-1eef-4253-a400-9890e92759c6"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// The RFQ API is for the sales team's tools, not the public, so every call\n// carries the x-api-token header. Uploaded files are passed through untouched.\nconst crypto = require('crypto');\n\nconst item = $input.first();\nconst expected = String($env.RFQ_API_TOKEN || '');\nconst provided = String(item.json.headers?.['x-api-token'] || '');\nconst ok = expected.length > 0\n  && provided.length === expected.length\n  && crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));\n\nreturn [{ json: { ...item.json, authorized: ok }, binary: item.binary }];"
+      },
+      "id": "ac2ee230-f9fd-4d54-a583-7f9e8efae338",
+      "name": "Authorize (xlsx)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -440,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "fc515a83-01d5-4583-cf75-d32fb4b38e5b",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "10f31c30-13f8-4006-a9b8-b31820bf28c6",
+      "name": "Token ok? (xlsx)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -220,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'unauthorized' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "442c6948-8303-46fb-adb6-feaeb58403c9",
+      "name": "Respond 401 (xlsx)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -220,
+        620
+      ]
     },
     {
       "parameters": {
@@ -422,10 +554,76 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        0,
+        -660,
         800
       ],
       "webhookId": "ef031470-a146-403a-ad34-03c32e83d5b7"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// The RFQ API is for the sales team's tools, not the public, so every call\n// carries the x-api-token header. Uploaded files are passed through untouched.\nconst crypto = require('crypto');\n\nconst item = $input.first();\nconst expected = String($env.RFQ_API_TOKEN || '');\nconst provided = String(item.json.headers?.['x-api-token'] || '');\nconst ok = expected.length > 0\n  && provided.length === expected.length\n  && crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));\n\nreturn [{ json: { ...item.json, authorized: ok }, binary: item.binary }];"
+      },
+      "id": "a82c415c-ac4b-490c-ab36-f2e77b43b828",
+      "name": "Authorize (resolve)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -440,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "fc515a83-01d5-4583-cf75-d32fb4b38e5b",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "554be974-5b34-464c-a327-a0cd0b04b550",
+      "name": "Token ok? (resolve)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -220,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'unauthorized' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "24bdc9b0-2bb2-4fe8-ac01-2958856dda95",
+      "name": "Respond 401 (resolve)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -220,
+        980
+      ]
     },
     {
       "parameters": {
@@ -521,7 +719,7 @@
     },
     {
       "parameters": {
-        "content": "## RFQ API\n`POST /webhook/rfq/quote` multipart `file` + `customer_id`, or JSON `{ customer_id, lines }`. Add `?format=xlsx` to get the Excel back directly.\n\n`GET /webhook/rfq/quote/xlsx?quote_no=Q-2026-01001` downloads the current version.\n\n`POST /webhook/rfq/review/resolve` `{ quote_no, line_no, sku, remember }` fixes a review line. With `remember: true` the customer part number is learned, so the next RFQ with that code is matched automatically.",
+        "content": "## RFQ API (header `x-api-token`)\n`POST /webhook/rfq/quote` multipart `file` + `customer_id`, or JSON `{ customer_id, lines }`. Add `?format=xlsx` to get the Excel back directly.\n\n`GET /webhook/rfq/quote/xlsx?quote_no=Q-2026-01001` downloads the current version.\n\n`POST /webhook/rfq/review/resolve` `{ quote_no, line_no, sku, remember }` fixes a review line. With `remember: true` the customer part number is learned, so the next RFQ with that code is matched automatically.",
         "height": 300,
         "width": 620,
         "color": 7
@@ -531,7 +729,7 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -60,
+        -720,
         -420
       ]
     }
@@ -541,7 +739,36 @@
       "main": [
         [
           {
+            "node": "Authorize (quote)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorize (quote)": {
+      "main": [
+        [
+          {
+            "node": "Token ok? (quote)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Token ok? (quote)": {
+      "main": [
+        [
+          {
             "node": "Normalize request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401 (quote)",
             "type": "main",
             "index": 0
           }
@@ -635,7 +862,36 @@
       "main": [
         [
           {
+            "node": "Authorize (xlsx)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorize (xlsx)": {
+      "main": [
+        [
+          {
+            "node": "Token ok? (xlsx)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Token ok? (xlsx)": {
+      "main": [
+        [
+          {
             "node": "Load quote",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401 (xlsx)",
             "type": "main",
             "index": 0
           }
@@ -686,7 +942,36 @@
       "main": [
         [
           {
+            "node": "Authorize (resolve)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorize (resolve)": {
+      "main": [
+        [
+          {
+            "node": "Token ok? (resolve)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Token ok? (resolve)": {
+      "main": [
+        [
+          {
             "node": "Resolve line",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401 (resolve)",
             "type": "main",
             "index": 0
           }

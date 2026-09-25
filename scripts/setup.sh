@@ -15,9 +15,18 @@ VOICE_WEBHOOK_SECRET=$(gen 16)
 PAYMENTS_SIGNING_SECRET=whsec_$(gen 16)
 ADMIN_API_TOKEN=$(gen 16)
 AGENT_API_TOKEN=$(gen 16)
+RFQ_API_TOKEN=$(gen 16)
+RFQ_FORM_PASSWORD=$(gen 8)
 EOF
   echo "Created .env with random secrets"
 fi
+# Keys added after the first release: append them to an existing .env.
+for key in RFQ_API_TOKEN RFQ_FORM_PASSWORD; do
+  if ! grep -q "^$key=" .env; then
+    echo "$key=$(node -e "console.log(require('crypto').randomBytes(12).toString('hex'))")" >> .env
+    echo "Added $key to .env"
+  fi
+done
 set -a; . ./.env; set +a
 
 N8N=n8n-portfolio-n8n-1
@@ -48,7 +57,8 @@ tmp=.credentials.tmp.json
 cat > "$tmp" <<EOF
 [{"id":"pgAppsCred000001","name":"Apps DB (Postgres)","type":"postgres","data":{"host":"postgres","database":"apps","user":"$POSTGRES_USER","password":"$POSTGRES_PASSWORD","port":5432,"ssl":"disable","allowUnauthorizedCerts":false,"maxConnections":20}},
  {"id":"openAiCred000001","name":"OpenAI","type":"openAiApi","data":{"apiKey":"${OPENAI_API_KEY:-not-configured}","url":"https://api.openai.com/v1","header":false}},
- {"id":"twilioCred000001","name":"Twilio","type":"twilioApi","data":{"authType":"authToken","accountSid":"${TWILIO_ACCOUNT_SID:-not-configured}","authToken":"${TWILIO_AUTH_TOKEN:-not-configured}"}}]
+ {"id":"twilioCred000001","name":"Twilio","type":"twilioApi","data":{"authType":"authToken","accountSid":"${TWILIO_ACCOUNT_SID:-not-configured}","authToken":"${TWILIO_AUTH_TOKEN:-not-configured}"}},
+ {"id":"rfqFormLogin0001","name":"RFQ form login","type":"httpBasicAuth","data":{"user":"sales","password":"$RFQ_FORM_PASSWORD"}}]
 EOF
 docker cp "$tmp" "$N8N":/tmp/credentials.json
 rm -f "$tmp"
@@ -65,4 +75,4 @@ echo "== Restarting n8n so published webhooks go live"
 docker compose restart n8n >/dev/null
 wait_ready
 sleep 3
-echo "Done. Editor: http://localhost:5678   RFQ form: http://localhost:5678/form/rfq"
+echo "Done. Editor: http://localhost:5678   RFQ form: http://localhost:5678/form/rfq (user: sales, password: RFQ_FORM_PASSWORD in .env)"

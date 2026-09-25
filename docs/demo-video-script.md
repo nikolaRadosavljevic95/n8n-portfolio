@@ -6,7 +6,7 @@ Record the screen with Loom or OBS. Speak slowly, show real results, skip the in
 "Hi, I'm Nikola. These are three n8n systems I built to show how I work: an RFQ to quote pipeline, a backend for an AI phone receptionist, and payment webhooks feeding a POS. Everything you see is running locally and covered by tests."
 
 ## 0:15 RFQ to quote (70 s)
-1. Open `http://localhost:5678/form/rfq`, pick Elektro-Mont, upload `samples/rfq-01-elektro-mont.pdf`.
+1. Open `http://localhost:5678/form/rfq`, log in as `sales` (password `RFQ_FORM_PASSWORD` from `.env`), pick Elektro-Mont, upload `samples/rfq-01-elektro-mont.pdf`.
 2. Open the Excel that downloads. Quote sheet: "12 of 17 lines priced from the price list. Note how 250 metres of cable became 3 rings of 100 metres."
 3. Review sheet: "Line 7 is the interesting one. The customer's part number says B16, the description says B10. A naive fuzzy match would quote the wrong breaker. Here it goes to review with both candidates."
 4. Show the RFQ Engine canvas for 10 seconds: "The LLM only reads free text. Products and prices always come from the database."

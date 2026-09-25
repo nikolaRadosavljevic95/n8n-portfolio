@@ -92,10 +92,22 @@ LEFT JOIN rfq.customers c ON c.id = x.cid;`,
   return wf;
 }
 
+// Webhook -> token check -> 401 on failure. Returns the name of the IF node,
+// whose "true" output continues to the actual endpoint.
+function guardedWebhook(wf, name, method, path, key, [x, y]) {
+  add(wf, name, nodes.webhook(method, path), [x - 660, y]);
+  add(wf, `Authorize (${key})`, nodes.code(code('rfq/authorize.js')), [x - 440, y]);
+  add(wf, `Token ok? (${key})`, nodes.ifTrue('={{ $json.authorized }}'), [x - 220, y]);
+  add(wf, `Respond 401 (${key})`, nodes.respondJson("={{ { error: 'unauthorized' } }}", 401), [x - 220, y + 180]);
+  wf.chain(name, `Authorize (${key})`, `Token ok? (${key})`);
+  wf.connect(`Token ok? (${key})`, `Respond 401 (${key})`, 1);
+  return `Token ok? (${key})`;
+}
+
 export function rfqApi() {
   const wf = new Workflow({ id: 'PfRfqApi00000001', name: 'RFQ: API (webhooks)' });
 
-  add(wf, 'POST /rfq/quote', nodes.webhook('POST', 'rfq/quote'), [0, 0]);
+  const quoteOk = guardedWebhook(wf, 'POST /rfq/quote', 'POST', 'rfq/quote', 'quote', [0, 0]);
   add(wf, 'Normalize request', nodes.code(code('rfq/api-normalize.js')), [220, 0]);
   add(wf, 'Valid request?', nodes.ifTrue('={{ $json.valid }}'), [440, 0]);
   add(wf, 'Run RFQ engine', nodes.execute(RFQ_ENGINE_ID, 'RFQ: Engine (sub-workflow)'), [660, -100],
@@ -125,7 +137,8 @@ export function rfqApi() {
   ), [900, 40]);
   add(wf, 'Respond 400', nodes.respondJson("={{ { error: 'invalid_request', details: $json.errors } }}", 400), [660, 120]);
 
-  wf.chain('POST /rfq/quote', 'Normalize request', 'Valid request?');
+  wf.connect(quoteOk, 'Normalize request', 0);
+  wf.chain('Normalize request', 'Valid request?');
   wf.connect('Valid request?', 'Run RFQ engine', 0);
   wf.connect('Valid request?', 'Respond 400', 1);
   wf.connect('Run RFQ engine', 'Engine accepted?', 0);
@@ -135,7 +148,7 @@ export function rfqApi() {
   wf.connect('Wants XLSX?', 'Respond with XLSX', 0);
   wf.connect('Wants XLSX?', 'Respond with quote JSON', 1);
 
-  add(wf, 'GET /rfq/quote/xlsx', nodes.webhook('GET', 'rfq/quote/xlsx'), [0, 440]);
+  const xlsxOk = guardedWebhook(wf, 'GET /rfq/quote/xlsx', 'GET', 'rfq/quote/xlsx', 'xlsx', [0, 440]);
   add(wf, 'Load quote', nodes.pg(
     'SELECT rfq.quote_json(id) AS quote FROM rfq.quotes WHERE quote_no = $1;',
     "={{ [ $json.query.quote_no ?? '' ] }}",
@@ -156,12 +169,13 @@ export function rfqApi() {
     },
   ], [900, 360]);
   add(wf, 'Respond 404', nodes.respondJson("={{ { error: 'quote_not_found' } }}", 404), [660, 540]);
-  wf.chain('GET /rfq/quote/xlsx', 'Load quote', 'Quote found?');
+  wf.connect(xlsxOk, 'Load quote', 0);
+  wf.chain('Load quote', 'Quote found?');
   wf.connect('Quote found?', 'Render quote', 0);
   wf.connect('Quote found?', 'Respond 404', 1);
   wf.connect('Render quote', 'Respond with XLSX file');
 
-  add(wf, 'POST /rfq/review/resolve', nodes.webhook('POST', 'rfq/review/resolve'), [0, 800]);
+  const resolveOk = guardedWebhook(wf, 'POST /rfq/review/resolve', 'POST', 'rfq/review/resolve', 'resolve', [0, 800]);
   add(wf, 'Resolve line', nodes.pg(
     'SELECT rfq.try_resolve_line($1, $2::int, $3, $4::boolean, $5) AS result;',
     "={{ [ String($json.body.quote_no ?? ''), Number.isInteger(Number($json.body.line_no)) ? Number($json.body.line_no) : 0, String($json.body.sku ?? ''), $json.body.remember === true, String($json.body.resolved_by || 'api') ] }}",
@@ -171,13 +185,14 @@ export function rfqApi() {
   add(wf, 'Respond 422 (resolve)', nodes.respondJson(
     "={{ { error: 'cannot_resolve', message: $json.result.error } }}", 422,
   ), [680, 880]);
-  wf.chain('POST /rfq/review/resolve', 'Resolve line', 'Resolved?');
+  wf.connect(resolveOk, 'Resolve line', 0);
+  wf.chain('Resolve line', 'Resolved?');
   wf.connect('Resolved?', 'Respond resolved', 0);
   wf.connect('Resolved?', 'Respond 422 (resolve)', 1);
 
   wf.note(
-    '## RFQ API\n`POST /webhook/rfq/quote` multipart `file` + `customer_id`, or JSON `{ customer_id, lines }`. Add `?format=xlsx` to get the Excel back directly.\n\n`GET /webhook/rfq/quote/xlsx?quote_no=Q-2026-01001` downloads the current version.\n\n`POST /webhook/rfq/review/resolve` `{ quote_no, line_no, sku, remember }` fixes a review line. With `remember: true` the customer part number is learned, so the next RFQ with that code is matched automatically.',
-    [-60, -420], 620, 300, 7,
+    '## RFQ API (header `x-api-token`)\n`POST /webhook/rfq/quote` multipart `file` + `customer_id`, or JSON `{ customer_id, lines }`. Add `?format=xlsx` to get the Excel back directly.\n\n`GET /webhook/rfq/quote/xlsx?quote_no=Q-2026-01001` downloads the current version.\n\n`POST /webhook/rfq/review/resolve` `{ quote_no, line_no, sku, remember }` fixes a review line. With `remember: true` the customer part number is learned, so the next RFQ with that code is matched automatically.',
+    [-720, -420], 620, 300, 7,
   );
   return wf;
 }
@@ -212,8 +227,9 @@ export function rfqForm() {
         },
       ],
     },
+    authentication: 'basicAuth',
     options: { path: 'rfq', buttonLabel: 'Create quote', appendAttribution: false },
-  }, [0, 0]);
+  }, [0, 0], { credentials: { httpBasicAuth: { id: 'rfqFormLogin0001', name: 'RFQ form login' } } });
   add(wf, 'Map form input', nodes.code(code('rfq/form-map.js')), [240, 0]);
   add(wf, 'Run RFQ engine', nodes.execute(RFQ_ENGINE_ID, 'RFQ: Engine (sub-workflow)'), [480, 0]);
   add(wf, 'Quote created?', nodes.ifTrue('={{ !$json.rejected }}'), [720, 0]);
@@ -236,7 +252,7 @@ export function rfqForm() {
   wf.connect('Quote created?', 'Quote ready', 0);
   wf.connect('Quote created?', 'Could not create quote', 1);
   wf.note(
-    '## Form for the sales team\nOpen `/form/rfq`, pick the customer, drop the PDF, get the Excel quote back in a few seconds. Same engine as the API.',
+    '## Form for the sales team\nOpen `/form/rfq`, log in as `sales` (password `RFQ_FORM_PASSWORD` in `.env`), pick the customer, drop the PDF, get the Excel quote back in a few seconds. Same engine as the API.',
     [-40, -220], 420, 180, 7,
   );
   return wf;

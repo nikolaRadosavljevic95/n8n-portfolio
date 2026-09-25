@@ -79,6 +79,10 @@ async function http(method, url, { json, form, headers = {}, raw } = {}) {
   return { status: res.status, body, headers: res.headers, ms };
 }
 
+// The RFQ API is only for the sales tools: every call carries the API token.
+const rfq = (method, url, opts = {}) => http(method, url, { ...opts, headers: { 'x-api-token': env.RFQ_API_TOKEN, ...(opts.headers || {}) } });
+const formLogin = () => ({ authorization: `Basic ${Buffer.from(`sales:${env.RFQ_FORM_PASSWORD}`).toString('base64')}` });
+
 const pdfForm = (file, customerId) => {
   const form = new FormData();
   form.append('customer_id', String(customerId));
@@ -95,7 +99,7 @@ async function rfqTests() {
   let quote;
 
   await test('rfq', 'ERP table PDF is parsed, matched and priced', async () => {
-    const r = await http('POST', '/webhook/rfq/quote', { form: pdfForm('rfq-01-elektro-mont.pdf', 1) });
+    const r = await rfq('POST', '/webhook/rfq/quote', { form: pdfForm('rfq-01-elektro-mont.pdf', 1) });
     assert(r.status === 201, `expected 201, got ${r.status}`, r.body);
     quote = r.body;
     fs.writeFileSync(path.join(OUT, 'rfq-01-response.json'), JSON.stringify(quote, null, 2));
@@ -116,13 +120,13 @@ async function rfqTests() {
   });
 
   await test('rfq', 'Same PDF twice returns the same quote (idempotent)', async () => {
-    const r = await http('POST', '/webhook/rfq/quote', { form: pdfForm('rfq-01-elektro-mont.pdf', 1) });
+    const r = await rfq('POST', '/webhook/rfq/quote', { form: pdfForm('rfq-01-elektro-mont.pdf', 1) });
     assert(r.status === 200 && r.body.duplicate === true && r.body.quote_no === quote.quote_no, 'expected duplicate of the first quote', r.body);
     assert(sql('SELECT count(*) FROM rfq.quotes') === '1', 'only one quote row should exist');
   });
 
   await test('rfq', 'Excel download has Quote and Review sheets', async () => {
-    const r = await http('GET', `/webhook/rfq/quote/xlsx?quote_no=${quote.quote_no}`);
+    const r = await rfq('GET', `/webhook/rfq/quote/xlsx?quote_no=${quote.quote_no}`);
     assert(r.status === 200, `expected 200, got ${r.status}`);
     assert((r.headers.get('content-type') || '').includes('spreadsheetml'), 'wrong content type', r.headers.get('content-type'));
     const buf = r.body;
@@ -135,7 +139,7 @@ async function rfqTests() {
   });
 
   await test('rfq', 'Email style bullet list is quoted fully automatically', async () => {
-    const r = await http('POST', '/webhook/rfq/quote', { form: pdfForm('rfq-02-brightline.pdf', 2) });
+    const r = await rfq('POST', '/webhook/rfq/quote', { form: pdfForm('rfq-02-brightline.pdf', 2) });
     assert(r.status === 201 && r.body.parser === 'list', 'expected list parser', r.body);
     assert(r.body.status === 'READY' && r.body.counts.ok === 7, 'all 7 lines should be priced', r.body.counts);
     const utp = r.body.lines.find((l) => l.sku === 'VX-UTP-CAT6-305');
@@ -144,19 +148,19 @@ async function rfqTests() {
   });
 
   await test('rfq', 'Free text RFQ without LLM goes to manual entry, nothing is guessed', async () => {
-    const r = await http('POST', '/webhook/rfq/quote', { form: pdfForm('rfq-03-nordic.pdf', 3) });
+    const r = await rfq('POST', '/webhook/rfq/quote', { form: pdfForm('rfq-03-nordic.pdf', 3) });
     assert(r.status === 201 && r.body.status === 'NEEDS_MANUAL_ENTRY' && r.body.counts.lines === 0, 'expected manual entry', r.body);
   });
 
   await test('rfq', 'Resolving a review line recalculates totals and learns the customer code', async () => {
-    const r = await http('POST', '/webhook/rfq/review/resolve',
+    const r = await rfq('POST', '/webhook/rfq/review/resolve',
       { json: { quote_no: quote.quote_no, line_no: 15, sku: 'VX-LEVER-3W-P50', remember: true, resolved_by: 'test' } });
     assert(r.status === 200 && r.body.remembered_mapping === true && r.body.counts.ok === 13, 'expected resolved line', r.body);
     assert(r.body.net_total > quote.net_total, 'net total should grow');
   });
 
   await test('rfq', 'Next RFQ with the learned code is matched automatically', async () => {
-    const r = await http('POST', '/webhook/rfq/quote', {
+    const r = await rfq('POST', '/webhook/rfq/quote', {
       json: { customer_id: 1, source_name: 'erp-export', lines: [{ line_no: 1, code: 'EM-40020', description: 'Lever connector', qty: 150, unit: 'pcs' }] },
     });
     const line = r.body.lines?.[0];
@@ -165,23 +169,42 @@ async function rfqTests() {
   });
 
   await test('rfq', 'Invalid input is rejected with a clear message', async () => {
-    const a = await http('POST', '/webhook/rfq/review/resolve', { json: { quote_no: quote.quote_no, line_no: 17, sku: 'VX-LEDP-6060-36W-40K' } });
+    const a = await rfq('POST', '/webhook/rfq/review/resolve', { json: { quote_no: quote.quote_no, line_no: 17, sku: 'VX-LEDP-6060-36W-40K' } });
     assert(a.status === 422 && a.body.message.includes('UNIT_MISMATCH'), 'resolve with impossible unit must fail', a.body);
-    const b = await http('POST', '/webhook/rfq/quote', { json: { customer_id: 99, lines: [{ description: 'MCB B16', qty: 1 }] } });
+    const b = await rfq('POST', '/webhook/rfq/quote', { json: { customer_id: 99, lines: [{ description: 'MCB B16', qty: 1 }] } });
     assert(b.status === 422 && b.body.error === 'unknown_customer' && b.body.message.includes('Unknown customer_id 99'), 'unknown customer must fail', b.body);
-    const e = await http('POST', '/webhook/rfq/quote', { form: (() => { const f = new FormData(); f.append('customer_id', '1'); f.append('file', new Blob(['not a pdf'], { type: 'application/pdf' }), 'fake.pdf'); return f; })() });
+    const e = await rfq('POST', '/webhook/rfq/quote', { form: (() => { const f = new FormData(); f.append('customer_id', '1'); f.append('file', new Blob(['not a pdf'], { type: 'application/pdf' }), 'fake.pdf'); return f; })() });
     assert(e.status === 422 && e.body.message === 'The uploaded file is not a PDF', 'fake PDF must be rejected', e.body);
     const errors = sql("SELECT count(*) FROM ops.workflow_errors WHERE occurred_at > now() - interval '1 minute'");
     assert(errors === '0', 'client errors must not be logged as workflow failures', errors);
-    const c = await http('POST', '/webhook/rfq/quote', { json: { lines: [] } });
+    const c = await rfq('POST', '/webhook/rfq/quote', { json: { lines: [] } });
     assert(c.status === 400, 'missing customer must be 400', c.body);
-    const d = await http('GET', '/webhook/rfq/quote/xlsx?quote_no=Q-NOPE');
+    const d = await rfq('GET', '/webhook/rfq/quote/xlsx?quote_no=Q-NOPE');
     assert(d.status === 404, 'unknown quote must be 404');
   });
 
-  await test('rfq', 'Upload form is served', async () => {
-    const r = await http('GET', '/form/rfq');
-    assert(r.status === 200 && r.body.toString().includes('Request for quotation'), 'form page should render');
+  await test('rfq', 'Upload form is served to a logged-in user', async () => {
+    const r = await http('GET', '/form/rfq', { headers: formLogin() });
+    assert(r.status === 200 && r.body.toString().includes('Request for quotation'), 'form page should render', r.status);
+  });
+
+  await test('rfq', 'API and form refuse requests without credentials', async () => {
+    const quotesBefore = sql('SELECT count(*) FROM rfq.quotes');
+    const calls = [
+      ['POST', '/webhook/rfq/quote', { form: pdfForm('rfq-01-elektro-mont.pdf', 1) }],
+      ['GET', `/webhook/rfq/quote/xlsx?quote_no=${quote.quote_no}`, {}],
+      ['POST', '/webhook/rfq/review/resolve', { json: { quote_no: quote.quote_no, line_no: 1, sku: 'VX-MCB-B16-1P' } }],
+    ];
+    for (const [method, url, opts] of calls) {
+      const none = await http(method, url, opts);
+      assert(none.status === 401, `${method} ${url} without a token should be 401`, none.status);
+      const wrong = await http(method, url, { ...opts, headers: { 'x-api-token': 'not-the-token' } });
+      assert(wrong.status === 401, `${method} ${url} with a wrong token should be 401`, wrong.status);
+    }
+    const form = await http('GET', '/form/rfq');
+    assert(form.status === 401, 'the form should ask for a login', form.status);
+    assert(sql('SELECT count(*) FROM rfq.quotes') === quotesBefore, 'the refused calls created no quote');
+    return '3 endpoints x (no token, wrong token) = 401, form = 401';
   });
 }
 
@@ -671,7 +694,7 @@ async function agentTests() {
 async function llmTests() {
   seed('21_rfq_seed.sql');
   await test('llm', 'Free text RFQ is parsed by the LLM, invented items are rejected', async () => {
-    const r = await http('POST', '/webhook/rfq/quote', { form: pdfForm('rfq-03-nordic.pdf', 3) });
+    const r = await rfq('POST', '/webhook/rfq/quote', { form: pdfForm('rfq-03-nordic.pdf', 3) });
     fs.writeFileSync(path.join(OUT, 'rfq-03-llm-response.json'), JSON.stringify(r.body, null, 2));
     assert(r.status === 201 && r.body.parser === 'llm', 'expected llm parser', r.body);
     const byDesc = (t) => r.body.lines.find((l) => l.description.includes(t));

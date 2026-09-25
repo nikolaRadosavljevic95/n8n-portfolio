@@ -2,12 +2,12 @@
 
 [![ci](https://github.com/nikolaRadosavljevic95/n8n-portfolio/actions/workflows/ci.yml/badge.svg)](https://github.com/nikolaRadosavljevic95/n8n-portfolio/actions/workflows/ci.yml)
 
-Four working n8n systems, built the way I would build them for a client: business rules in Postgres, idempotent webhooks, retries with dead letters, and end-to-end tests. One command starts everything locally, and 47 automated tests prove it works.
+Four working n8n systems, built the way I would build them for a client: business rules in Postgres, idempotent webhooks, retries with dead letters, and end-to-end tests. One command starts everything locally, and 48 automated tests prove it works.
 
 | Demo | What it solves | Proof |
 |---|---|---|
 | [1. RFQ to quote](#1-rfq-to-quote) | A customer sends a PDF request for quotation, sales gets a priced Excel quote back in about a second, with the uncertain lines separated for review | 12 of 17 lines priced automatically on a messy ERP export, the other 5 flagged with a reason. 7 of 7 on an email list |
-| [2. AI receptionist backend](#2-ai-receptionist-backend-vapi--retell) | The tools a Vapi or Retell voice agent calls to check availability, book, move and cancel appointments | 10 callers racing for one slot: exactly 1 booking. p95 latency 113 ms |
+| [2. AI receptionist backend](#2-ai-receptionist-backend-vapi--retell) | The tools a Vapi or Retell voice agent calls to check availability, book, move and cancel appointments | 10 callers racing for one slot: exactly 1 booking. p95 latency 110 ms |
 | [3. Payment webhooks to POS](#3-payment-webhooks-to-pos) | Stripe-style payment events turned into fulfilled orders in a POS, without losing or duplicating anything | Duplicates, out-of-order refunds, a flaky POS and a dead POS all handled and tested |
 | [4. Support agent with its hands tied](#4-support-agent-with-its-hands-tied) | An LLM agent that can actually refund, cancel and hand over, with the limits enforced in the database rather than in the prompt | A customer message ordering it to refund a stranger's order: the model obeys, the database refuses, nothing moves. 16 scenarios |
 
@@ -20,11 +20,11 @@ You need Docker, Node 20+ and bash (Git Bash is fine on Windows).
 ```bash
 npm run check                      # static checks, no Docker needed, a few seconds
 bash scripts/setup.sh              # starts n8n + Postgres, loads data, imports and publishes 16 workflows
-node tests/run-all.mjs             # 46 end-to-end tests, about 75 seconds
+node tests/run-all.mjs             # 47 end-to-end tests, about 90 seconds
 bash scripts/test-llm-mock.sh      # the LLM branch, against an OpenAI-compatible mock
 ```
 
-Then open the editor at http://localhost:5678 (it asks you to create an owner account on first visit) and the sales form at http://localhost:5678/form/rfq.
+Then open the editor at http://localhost:5678 (it asks you to create an owner account on first visit) and the sales form at http://localhost:5678/form/rfq (user `sales`, password `RFQ_FORM_PASSWORD` from `.env`).
 
 `setup.sh` generates random secrets into `.env` on the first run. Nothing secret is committed.
 
@@ -69,13 +69,15 @@ The engine in n8n (a sub-workflow shared by the API and the form):
 - **It learns.** When sales resolves a line with `remember: true`, the customer's part number is stored, and the next RFQ with that code is matched automatically (tested).
 - **Idempotent.** The same PDF for the same customer returns the same quote, so a double click never creates a second one.
 - **Client errors do not page anyone.** Bad input comes back as `422 { error, message }`. Only real failures reach the central error workflow.
+- **Only the sales team gets in.** Price lists and customer quotes are business data, so every API call needs an `x-api-token` header (compared in constant time) and the form asks for a login. Calls without them get `401` before anything else runs (tested).
 
 **API**
 
 ```bash
-curl -F customer_id=1 -F file=@samples/rfq-01-elektro-mont.pdf http://localhost:5678/webhook/rfq/quote
-curl -o quote.xlsx "http://localhost:5678/webhook/rfq/quote/xlsx?quote_no=Q-2026-01001"
-curl -H "Content-Type: application/json" -d '{"quote_no":"Q-2026-01001","line_no":15,"sku":"VX-LEVER-3W-P50","remember":true}' \
+curl -H "x-api-token: $RFQ_API_TOKEN" -F customer_id=1 -F file=@samples/rfq-01-elektro-mont.pdf http://localhost:5678/webhook/rfq/quote
+curl -H "x-api-token: $RFQ_API_TOKEN" -o quote.xlsx "http://localhost:5678/webhook/rfq/quote/xlsx?quote_no=Q-2026-01001"
+curl -H "x-api-token: $RFQ_API_TOKEN" -H "Content-Type: application/json" \
+     -d '{"quote_no":"Q-2026-01001","line_no":15,"sku":"VX-LEVER-3W-P50","remember":true}' \
      http://localhost:5678/webhook/rfq/review/resolve
 ```
 
@@ -130,7 +132,7 @@ sequenceDiagram
 - **Retries are safe.** Voice platforms retry when your webhook is slow. Every tool call is stored by its id, so a retry returns the original answer instead of booking again.
 - **Speakable answers.** At most three options, at least an hour apart, "today" and "tomorrow" instead of dates, prices and duration included, all in the salon's time zone.
 - **Callers only touch their own bookings.** Cancel and reschedule are matched against caller ID. Guessing a reference returns "not found".
-- **Fast hot path.** Adapter, one SQL call, reply: p50 68 ms, p95 113 ms over 30 calls. CRM updates and SMS happen after the reply.
+- **Fast hot path.** Adapter, one SQL call, reply: p50 73 ms, p95 110 ms over 30 calls. CRM updates and SMS happen after the reply.
 - **Outcome from facts, not from the LLM summary.** After the call, the outcome (booked, rescheduled, cancelled, enquiry without booking) is derived from the tool calls that actually happened. The caller is upserted into the CRM by E.164 phone number, and an enquiry without a booking creates a follow-up task.
 - **Transactional outbox for SMS.** Confirmations are written in the same transaction as the booking and sent by a dispatcher with retries and backoff. Set `SMS_PROVIDER=twilio` to use the Twilio branch.
 
