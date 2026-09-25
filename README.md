@@ -319,7 +319,7 @@ The same reasoning is why demo 4 puts the agent's limits in a SQL function rathe
 
 **Operations.** Every workflow reports failures to one error workflow, which logs to `ops.workflow_errors` and raises an alert. Sticky notes on each canvas explain the design for whoever maintains it next.
 
-**Taking it to production** I would add queue mode with separate workers (Redis), external task runners, Postgres backups, n8n metrics into Prometheus/Grafana, and real alert channels (Slack, PagerDuty) in place of the alert table. `.github/workflows/ci.yml` runs on every pull request and on `main`: first the static checks (Code node syntax, and a guard that the generated JSON in `workflows/` still matches `src/`), then the same setup and test suite you run locally, with the test report kept as a build artifact.
+**Taking it to production** I would add queue mode with separate workers (Redis), external task runners, Postgres backups, n8n metrics into Prometheus/Grafana, and real alert channels (Slack, PagerDuty) in place of the alert table. `.github/workflows/ci.yml` runs on every pull request and on `main`: first the static checks (Code node syntax, a guard that the generated JSON in `workflows/` still matches `src/`, and [n8n-prodcheck](https://github.com/nikolaRadosavljevic95/n8n-prodcheck) over every workflow, with the reviewed exceptions and their reasons in `.prodcheck-ignore.json`), then the same setup and test suite you run locally, with the test report kept as a build artifact.
 
 ## About
 
@@ -332,6 +332,8 @@ I take on fixed-price work on n8n systems that already run in production, or are
 - **Production and security audit** of your exported workflows: a written report ranked by severity, with a fix plan. No access to your servers or credentials is needed.
 - **Fix sprint**: the fixes from the audit, delivered as workflows-as-code with end-to-end tests like the ones in this repo.
 - **Booking backend for Vapi or Retell voice agents**, built on demo 2 and deployed on your own infrastructure.
+
+Want a first look on your own? [n8n-prodcheck](https://github.com/nikolaRadosavljevic95/n8n-prodcheck) is the free checker I start every audit with. One command, it reads your exported workflows and never touches your instance.
 
 <!-- TODO: replace the link below with the Upwork or Contra profile once it is live -->
 Get in touch through my GitHub profile: [github.com/nikolaRadosavljevic95](https://github.com/nikolaRadosavljevic95).
