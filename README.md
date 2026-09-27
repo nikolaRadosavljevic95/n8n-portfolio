@@ -11,7 +11,7 @@ Four working n8n systems, built the way I would build them for a client: busines
 | [3. Payment webhooks to POS](#3-payment-webhooks-to-pos) | Stripe-style payment events turned into fulfilled orders in a POS, without losing or duplicating anything | Duplicates, out-of-order refunds, a flaky POS and a dead POS all handled and tested |
 | [4. Support agent with its hands tied](#4-support-agent-with-its-hands-tied) | An LLM agent that can actually refund, cancel and hand over, with the limits enforced in the database rather than in the prompt | A customer message ordering it to refund a stranger's order: the model obeys, the database refuses, nothing moves. 16 scenarios |
 
-Built on n8n 2.40.5 and Postgres 17. Full test output: [docs/test-report.md](docs/test-report.md). Agent scenarios: [docs/agent-evals.md](docs/agent-evals.md).
+Built on n8n 2.40.7 and Postgres 17. Full test output: [docs/test-report.md](docs/test-report.md). Agent scenarios: [docs/agent-evals.md](docs/agent-evals.md).
 
 ## Run it
 
@@ -114,7 +114,7 @@ sequenceDiagram
   V->>N: check_availability (x-vapi-secret)
   N->>DB: booking.handle_tool()
   DB-->>N: 3 free times, 60 min apart
-  N-->>V: results in ~80 ms
+  N-->>V: results in ~90 ms
   V->>C: I can offer 12:00 with Ana, 13:00 or 14:00
   C->>V: 12:00 please, I am Jovana
   V->>N: book_appointment (toolCallId)
@@ -133,7 +133,7 @@ sequenceDiagram
 - **Speakable answers.** At most three options, at least an hour apart, "today" and "tomorrow" instead of dates, prices and duration included, all in the salon's time zone.
 - **Callers only touch their own bookings.** Cancel and reschedule are matched against caller ID. Guessing a reference returns "not found".
 - **Only the voice platform gets in.** Vapi sends a shared secret header. Retell cannot add headers to its call events, so its requests are verified by the `x-retell-signature` it attaches (HMAC-SHA256 of the raw body with your Retell API key, rejected after 5 minutes). Forged, stale and altered requests get `401` (tested).
-- **Fast hot path.** Adapter, one SQL call, reply: p50 79 ms, p95 127 ms over 30 calls. CRM updates and SMS happen after the reply.
+- **Fast hot path.** Adapter, one SQL call, reply: p50 92 ms, p95 127 ms over 30 calls. CRM updates and SMS happen after the reply.
 - **Outcome from facts, not from the LLM summary.** After the call, the outcome (booked, rescheduled, cancelled, enquiry without booking) is derived from the tool calls that actually happened. The caller is upserted into the CRM by E.164 phone number, and an enquiry without a booking creates a follow-up task.
 - **Transactional outbox for SMS.** Confirmations are written in the same transaction as the booking and sent by a dispatcher with retries and backoff. Set `SMS_PROVIDER=twilio` to use the Twilio branch.
 

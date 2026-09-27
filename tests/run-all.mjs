@@ -761,7 +761,7 @@ console.log('Metrics:', JSON.stringify(metrics));
 const md = [
   '# Test report',
   '',
-  `Run: ${new Date().toISOString()}  |  n8n 2.40.5  |  ${passed} passed, ${failed} failed in ${seconds}s`,
+  `Run: ${new Date().toISOString()}  |  n8n 2.40.7  |  ${passed} passed, ${failed} failed in ${seconds}s`,
   '',
   '| Demo | Test | Result | Time | Evidence |',
   '|---|---|---|---|---|',
