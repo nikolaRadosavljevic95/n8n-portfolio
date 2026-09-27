@@ -308,7 +308,7 @@
     {
       "parameters": {
         "content": "## Backend for an AI phone receptionist\nVapi and Retell call these webhooks when the voice agent uses a tool: `check_availability`, `book_appointment`, `find_appointments`, `cancel_appointment`, `reschedule_appointment`.\n\nBoth providers go through one adapter, so the booking logic does not care which one you use. Vapi requests carry the shared secret (`x-vapi-secret`). Retell requests are verified by their `x-retell-signature` (HMAC of the raw body with the Retell API key, 5 minute window), because Retell cannot add headers to its call events. Anything else gets a 401.",
-        "height": 220,
+        "height": 250,
         "width": 520,
         "color": 7
       },
@@ -318,7 +318,7 @@
       "typeVersion": 1,
       "position": [
         -40,
-        -320
+        -350
       ]
     },
     {
