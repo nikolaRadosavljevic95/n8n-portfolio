@@ -98,7 +98,7 @@ function guardedWebhook(wf, name, method, path, key, [x, y]) {
   add(wf, name, nodes.webhook(method, path), [x - 660, y]);
   add(wf, `Authorize (${key})`, nodes.code(code('rfq/authorize.js')), [x - 440, y]);
   add(wf, `Token ok? (${key})`, nodes.ifTrue('={{ $json.authorized }}'), [x - 220, y]);
-  add(wf, `Respond 401 (${key})`, nodes.respondJson("={{ { error: 'unauthorized' } }}", 401), [x - 220, y + 180]);
+  add(wf, `Respond 401 (${key})`, nodes.respondJson("={{ { error: 'unauthorized' } }}", 401), [x, y + 180]);
   wf.chain(name, `Authorize (${key})`, `Token ok? (${key})`);
   wf.connect(`Token ok? (${key})`, `Respond 401 (${key})`, 1);
   return `Token ok? (${key})`;

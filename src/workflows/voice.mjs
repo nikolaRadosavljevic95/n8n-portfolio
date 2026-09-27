@@ -35,7 +35,7 @@ function voiceTools() {
 
   wf.note(
     '## Backend for an AI phone receptionist\nVapi and Retell call these webhooks when the voice agent uses a tool: `check_availability`, `book_appointment`, `find_appointments`, `cancel_appointment`, `reschedule_appointment`.\n\nBoth providers go through one adapter, so the booking logic does not care which one you use. Vapi requests carry the shared secret (`x-vapi-secret`). Retell requests are verified by their `x-retell-signature` (HMAC of the raw body with the Retell API key, 5 minute window), because Retell cannot add headers to its call events. Anything else gets a 401.',
-    [-40, -320], 520, 220, 7,
+    [-40, -350], 520, 250, 7,
   );
   wf.note(
     '## Hot path: under 100 ms\nThe caller is waiting on the line, so the response path is only adapter, SQL, reply. Anything slow (CRM, SMS) happens after the reply or asynchronously.\n\n**Correctness lives in Postgres**\n- `EXCLUDE` constraint: two overlapping bookings for one stylist cannot exist, even under concurrent calls\n- Voice platforms retry on timeouts. The tool call id makes every call idempotent, so a retry never double books\n- Callers can only cancel or move their own bookings (matched by caller ID)',
