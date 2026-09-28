@@ -191,6 +191,8 @@ stateDiagram-v2
 
 The POS is a mock with failure injection (`mock.pos_config`), so all of this runs locally.
 
+Write-up: [Your n8n webhook dedupe is not atomic](docs/posts/your-n8n-webhook-dedupe-is-not-atomic.md), why "look up, then insert" lets duplicates through and what the inbox, lease and dead letters do instead.
+
 ---
 
 ---
@@ -302,6 +304,8 @@ scenarios and what each one asserts are in [docs/agent-evals.md](docs/agent-eval
 The sample shop is a fictional electronics retailer with three customers and
 eight orders covering every branch: delivered and refundable, in transit,
 cancellable, long out of its return window, and one that belongs to somebody else.
+
+Write-up: [Let the database, not the prompt, limit what your AI agent can refund](docs/posts/let-the-database-limit-what-your-ai-agent-can-refund.md), how ownership, the refund limit and the step budget are enforced in SQL and tested with a model that obeys the customer.
 
 ## How it is built
 
