@@ -139,6 +139,8 @@ sequenceDiagram
 
 Vapi and Retell payloads go through one adapter, so the booking logic does not care which provider you use.
 
+Write-up: [Why your Vapi or Retell agent double-books](docs/posts/why-your-voice-agent-double-books.md), the two failure modes and how the constraint and the stored tool-call ids close them.
+
 ![After-call and SMS outbox canvas](docs/img/canvas-voice-after-call.png)
 
 ---
