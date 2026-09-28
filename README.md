@@ -342,8 +342,7 @@ I take on fixed-price work on n8n systems that already run in production, or are
 
 Want a first look on your own? [n8n-prodcheck](https://github.com/nikolaRadosavljevic95/n8n-prodcheck) is the free checker I start every audit with. One command, it reads your exported workflows and never touches your instance.
 
-<!-- TODO: replace the link below with the Upwork or Contra profile once it is live -->
-Get in touch through my GitHub profile: [github.com/nikolaRadosavljevic95](https://github.com/nikolaRadosavljevic95).
+Get in touch through my Upwork profile: [Nikola R. on Upwork](https://www.upwork.com/freelancers/~01747583ba0c055872).
 
 ## License
 
