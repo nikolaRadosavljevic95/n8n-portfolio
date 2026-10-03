@@ -11,7 +11,7 @@ Four working n8n systems, built the way I would build them for a client: busines
 | [3. Payment webhooks to POS](#3-payment-webhooks-to-pos) | Stripe-style payment events turned into fulfilled orders in a POS, without losing or duplicating anything | Duplicates, out-of-order refunds, a flaky POS and a dead POS all handled and tested |
 | [4. Support agent with its hands tied](#4-support-agent-with-its-hands-tied) | An LLM agent that can actually refund, cancel and hand over, with the limits enforced in the database rather than in the prompt | A customer message ordering it to refund a stranger's order: the model obeys, the database refuses, nothing moves. 16 scenarios |
 
-Built on n8n 2.40.7 and Postgres 17. Full test output: [docs/test-report.md](docs/test-report.md). Agent scenarios: [docs/agent-evals.md](docs/agent-evals.md).
+Built on n8n 2.41.6 and Postgres 17. Full test output: [docs/test-report.md](docs/test-report.md). Agent scenarios: [docs/agent-evals.md](docs/agent-evals.md).
 
 ## Run it
 
